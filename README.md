@@ -11,6 +11,8 @@ Every field in the response says whether the value came from the model or from a
 > labelled **Mock mode** and returns deterministic sample answers, so you can clone the repository and
 > see the whole flow immediately.
 
+![Architecture overview: the request flow, the five questions asked in one batched Jev call, the three deterministic rules, the project layers, and the provenance fields](docs/screenshots/00-architecture.png)
+
 ---
 
 ## Screenshots
@@ -462,7 +464,7 @@ that requires a paid subscription for commercial use.
 │   └── Directory.Build.props            Shared compiler settings, warnings as errors
 ├── frontend/
 │   └── jev-ticket-router-web/           React 19 + TypeScript + Vite + MUI
-├── docs/screenshots/
+├── docs/screenshots/                    Architecture diagram + captures of the running app
 ├── .editorconfig
 ├── .env.example
 ├── .gitignore

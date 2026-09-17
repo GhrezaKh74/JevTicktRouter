@@ -41,7 +41,8 @@ export const cleanResult: TriageTicketResponse = {
   routingSummary: 'Auto-routed to IdentityAccess at Low priority.',
   appliedRules: [],
   jev: {
-    mode: 'Mock',
+    provider: 'Mock',
+    isLive: false,
     model: 'jev-mock-1.13.0',
     latencyMs: 42,
     priorityScore: 0.12,

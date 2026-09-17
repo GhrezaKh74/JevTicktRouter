@@ -50,7 +50,12 @@ export function DeveloperDetails({ result }: DeveloperDetailsProps) {
 
             <Section title={t('devDetails.jevResponse')}>
               <Stack direction="row" spacing={1} useFlexGap sx={{ mb: 1, flexWrap: 'wrap' }}>
-                <Chip size="small" label={t('devDetails.mode', { value: result.jev.mode })} />
+                <Chip
+                  size="small"
+                  color="secondary"
+                  variant="outlined"
+                  label={t('devDetails.provider', { value: result.jev.provider })}
+                />
                 <Chip size="small" label={t('devDetails.model', { value: result.jev.model })} />
                 <Chip
                   size="small"

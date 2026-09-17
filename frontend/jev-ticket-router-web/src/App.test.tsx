@@ -10,7 +10,8 @@ import type { HealthResponse } from './api/types';
 
 const health: HealthResponse = {
   status: 'Healthy',
-  jevMode: 'Mock',
+  provider: 'Mock',
+  isLive: false,
   model: 'jev-latest',
   minimumConfidence: 0.75,
 };

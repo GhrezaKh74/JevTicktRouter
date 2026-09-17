@@ -55,9 +55,16 @@ export interface JevStateSummary {
   readonly redacted: boolean;
 }
 
-/** Sanitised diagnostics about the Jev call. */
+/** Which engine produced a decision. */
+export const AI_PROVIDERS = ['Jev', 'Local', 'Mock'] as const;
+
+/** A decision provider. */
+export type AiProvider = (typeof AI_PROVIDERS)[number];
+
+/** Sanitised diagnostics about the decision-engine call. */
 export interface JevDiagnostics {
-  readonly mode: 'Live' | 'Mock';
+  readonly provider: AiProvider;
+  readonly isLive: boolean;
   readonly model: string;
   readonly latencyMs: number;
   readonly priorityScore: number;
@@ -89,7 +96,8 @@ export interface TriageTicketResponse {
 /** The response body of GET /api/health. */
 export interface HealthResponse {
   readonly status: string;
-  readonly jevMode: 'Live' | 'Mock';
+  readonly provider: AiProvider;
+  readonly isLive: boolean;
   readonly model: string;
   readonly minimumConfidence: number;
 }

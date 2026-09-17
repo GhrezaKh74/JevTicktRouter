@@ -1,4 +1,5 @@
 using System.Text.Json;
+using JevTicketRouter.Application.Decisions;
 using JevTicketRouter.Application.Jev.Abstractions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -6,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace JevTicketRouter.Api;
 
 /// <summary>
-/// Turns failures from the Jev integration into RFC 7807 ProblemDetails responses. Messages are
+/// Turns failures from the decision engine into RFC 7807 ProblemDetails responses. Messages are
 /// written for an operator reading the dashboard and never include the API key or the ticket text.
 /// </summary>
 public sealed class JevExceptionHandler : IExceptionHandler
@@ -77,6 +78,28 @@ public sealed class JevExceptionHandler : IExceptionHandler
             StatusCodes.Status400BadRequest,
             "The request body could not be read.",
             "The request body is not valid JSON."),
+
+        // A malformed model reply is a gateway problem, not a server fault: the request was fine,
+        // the upstream answer was not. It is reported plainly rather than retried or guessed at.
+        DecisionEngineException { Kind: DecisionFailureKind.MalformedResponse } engine => (
+            StatusCodes.Status502BadGateway,
+            "The AI provider returned an unusable response.",
+            engine.Message),
+
+        DecisionEngineException { Kind: DecisionFailureKind.Configuration } engine => (
+            StatusCodes.Status503ServiceUnavailable,
+            "The AI provider is not configured correctly.",
+            engine.Message),
+
+        DecisionEngineException { IsTransient: true } engine => (
+            StatusCodes.Status503ServiceUnavailable,
+            "The triage service is temporarily unavailable.",
+            engine.Message),
+
+        DecisionEngineException engine => (
+            StatusCodes.Status502BadGateway,
+            "The triage service could not complete the request.",
+            engine.Message),
 
         JevClientException { IsTransient: true } jev => (
             StatusCodes.Status503ServiceUnavailable,

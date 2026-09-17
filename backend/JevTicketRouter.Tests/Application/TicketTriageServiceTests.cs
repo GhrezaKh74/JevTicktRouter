@@ -1,9 +1,8 @@
 using FluentAssertions;
-using JevTicketRouter.Application.Jev;
-using JevTicketRouter.Application.Jev.Abstractions;
-using JevTicketRouter.Application.Jev.Contracts;
+using JevTicketRouter.Application.Decisions;
 using JevTicketRouter.Application.Tickets;
 using JevTicketRouter.Application.Tickets.Dtos;
+using JevTicketRouter.Domain.Decisions;
 using JevTicketRouter.Domain.Redaction;
 using JevTicketRouter.Domain.Tickets;
 using JevTicketRouter.Domain.Triage;
@@ -14,73 +13,33 @@ using NSubstitute;
 namespace JevTicketRouter.Tests.Application;
 
 /// <summary>
-/// Covers the triage pipeline against a mocked <see cref="IJevClient"/>: the question batch that is
-/// sent, the provenance that comes back, and the redaction applied on the way out.
+/// Covers the triage pipeline against a mocked <see cref="IDecisionEngine"/>: what the engine is
+/// asked, the provenance that comes back, and the redaction applied on the way out.
+/// <para>
+/// The engine is a substitute rather than a real provider, which is the point of the abstraction:
+/// these assertions hold identically whether Jev, a local model, or the mock is configured.
+/// </para>
 /// </summary>
 public sealed class TicketTriageServiceTests
 {
-    private readonly IJevClient _jevClient = Substitute.For<IJevClient>();
+    private readonly IDecisionEngine _engine = Substitute.For<IDecisionEngine>();
 
     [Fact]
-    public async Task TriageAsync_SendsEveryQuestionInASingleBatchedCall()
+    public async Task TriageAsync_AsksTheEngineExactlyOnce()
     {
-        GivenAnswers();
-        var service = CreateService();
+        GivenDecision();
 
-        await service.TriageAsync(Request(), CancellationToken.None);
+        await CreateService().TriageAsync(Request(), CancellationToken.None);
 
-        var request = await CapturedRequestAsync();
-
-        request.Questions.Should().HaveCount(5);
-        request.Questions.Keys.Should().BeEquivalentTo(
-            JevTriageQuestions.CategoryQuestionId,
-            JevTriageQuestions.TargetTeamQuestionId,
-            JevTriageQuestions.PriorityQuestionId,
-            JevTriageQuestions.SensitiveDataQuestionId,
-            JevTriageQuestions.HumanReviewQuestionId);
-
-        await _jevClient.Received(1).EvaluateAsync(Arg.Any<JevSystemOneRequest>(), Arg.Any<CancellationToken>());
+        await _engine.Received(1).EvaluateAsync(Arg.Any<TicketInput>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task TriageAsync_UsesTheConfiguredModelAndTheDocumentedPrimitives()
+    public async Task TriageAsync_WithAConfidentTicket_ReturnsEngineValuesUntouched()
     {
-        GivenAnswers();
-        var service = CreateService();
+        GivenDecision();
 
-        await service.TriageAsync(Request(), CancellationToken.None);
-
-        var request = await CapturedRequestAsync();
-
-        request.Model.Should().Be("jev-latest");
-        request.Questions[JevTriageQuestions.CategoryQuestionId].Should().BeOfType<JevChoiceQuestion>();
-        request.Questions[JevTriageQuestions.TargetTeamQuestionId].Should().BeOfType<JevChoiceQuestion>();
-        request.Questions[JevTriageQuestions.PriorityQuestionId].Should().BeOfType<JevScoreQuestion>();
-        request.Questions[JevTriageQuestions.SensitiveDataQuestionId].Should().BeOfType<JevNoulQuestion>();
-        request.Questions[JevTriageQuestions.HumanReviewQuestionId].Should().BeOfType<JevNoulQuestion>();
-    }
-
-    [Fact]
-    public async Task TriageAsync_AsksTheScoreQuestionWithOneLevelPerPriority()
-    {
-        GivenAnswers();
-        var service = CreateService();
-
-        await service.TriageAsync(Request(), CancellationToken.None);
-
-        var request = await CapturedRequestAsync();
-        var priority = (JevScoreQuestion)request.Questions[JevTriageQuestions.PriorityQuestionId];
-
-        priority.Criteria.Should().HaveCount(Enum.GetValues<TicketPriority>().Length);
-    }
-
-    [Fact]
-    public async Task TriageAsync_WithAConfidentTicket_ReturnsJevValuesUntouched()
-    {
-        GivenAnswers();
-        var service = CreateService();
-
-        var response = await service.TriageAsync(Request(), CancellationToken.None);
+        var response = await CreateService().TriageAsync(Request(), CancellationToken.None);
 
         response.Category.Value.Should().Be(nameof(TicketCategory.AccessRequest));
         response.Category.Origin.Should().Be(nameof(DecisionOrigin.JevModel));
@@ -94,10 +53,9 @@ public sealed class TicketTriageServiceTests
     public async Task TriageAsync_WithSensitiveData_RedactsTheTicketTextFromTheResponse()
     {
         const string secret = "my card number is 6037991234567890";
-        GivenAnswers(sensitiveProbability: 0.96);
-        var service = CreateService();
+        GivenDecision(sensitiveProbability: 0.96);
 
-        var response = await service.TriageAsync(
+        var response = await CreateService().TriageAsync(
             Request(description: $"Please help, {secret} and it was charged twice."),
             CancellationToken.None);
 
@@ -112,10 +70,9 @@ public sealed class TicketTriageServiceTests
     [Fact]
     public async Task TriageAsync_WithoutSensitiveData_EchoesTheTicketTextBack()
     {
-        GivenAnswers();
-        var service = CreateService();
+        GivenDecision();
 
-        var response = await service.TriageAsync(
+        var response = await CreateService().TriageAsync(
             Request(description: "The reporting portal fails to save a record."),
             CancellationToken.None);
 
@@ -126,10 +83,9 @@ public sealed class TicketTriageServiceTests
     [Fact]
     public async Task TriageAsync_WhenARuleOverrides_SaysSoOnTheField()
     {
-        GivenAnswers(category: TicketCategory.SecurityConcern);
-        var service = CreateService();
+        GivenDecision(category: TicketCategory.SecurityConcern);
 
-        var response = await service.TriageAsync(Request(), CancellationToken.None);
+        var response = await CreateService().TriageAsync(Request(), CancellationToken.None);
 
         response.NeedsHumanReview.Value.Should().BeTrue();
         response.NeedsHumanReview.ModelValue.Should().BeFalse();
@@ -137,77 +93,75 @@ public sealed class TicketTriageServiceTests
         response.NeedsHumanReview.WasOverridden.Should().BeTrue();
     }
 
-    [Fact]
-    public async Task TriageAsync_ReportsTheModeOfTheUnderlyingClient()
+    [Theory]
+    [InlineData(AiProvider.Jev, true)]
+    [InlineData(AiProvider.Local, true)]
+    [InlineData(AiProvider.Mock, false)]
+    public async Task TriageAsync_ReportsWhicheverProviderDecided(AiProvider provider, bool isLive)
     {
-        GivenAnswers();
-        _jevClient.IsLive.Returns(false);
+        GivenDecision(provider: provider, isLive: isLive);
 
         var response = await CreateService().TriageAsync(Request(), CancellationToken.None);
 
-        response.Jev.Mode.Should().Be("Mock");
+        response.Jev.Provider.Should().Be(provider.ToString());
+        response.Jev.IsLive.Should().Be(isLive);
     }
 
     [Fact]
-    public async Task TriageAsync_SendsTheTicketAsStructuredStateWithoutTrailingWhitespace()
+    public async Task TriageAsync_TrimsTheTicketBeforeSendingIt()
     {
-        GivenAnswers();
-        var service = CreateService();
+        GivenDecision();
 
-        await service.TriageAsync(
+        await CreateService().TriageAsync(
             Request(title: "  A padded title  "),
             CancellationToken.None);
 
-        var request = await CapturedRequestAsync();
-        var state = request.State.Should().BeAssignableTo<IReadOnlyDictionary<string, object>>().Subject;
-        var ticket = state["ticket"].Should().BeAssignableTo<IReadOnlyDictionary<string, string>>().Subject;
+        var sent = CapturedInput();
 
-        ticket["title"].Should().Be("A padded title");
-        ticket.Should().ContainKey("requester_role");
+        sent.Title.Should().Be("A padded title");
+        sent.RequesterRole.Should().Be(RequesterRole.InternalSupport);
     }
 
     [Fact]
-    public async Task TriageAsync_PropagatesClientFailures()
+    public async Task TriageAsync_PropagatesEngineFailures()
     {
-        _jevClient
-            .EvaluateAsync(Arg.Any<JevSystemOneRequest>(), Arg.Any<CancellationToken>())
-            .Returns<Task<JevSystemOneResponse>>(_ => throw new JevClientException("upstream is down"));
+        _engine
+            .EvaluateAsync(Arg.Any<TicketInput>(), Arg.Any<CancellationToken>())
+            .Returns<Task<DecisionResult>>(_ => throw new DecisionEngineException(
+                "upstream is down",
+                AiProvider.Local,
+                DecisionFailureKind.Transport));
 
-        var act = async () => await CreateService().TriageAsync(
-            Request(),
-            CancellationToken.None);
+        var act = async () => await CreateService().TriageAsync(Request(), CancellationToken.None);
 
-        await act.Should().ThrowAsync<JevClientException>().WithMessage("upstream is down");
+        await act.Should().ThrowAsync<DecisionEngineException>().WithMessage("upstream is down");
     }
 
     [Fact]
     public async Task TriageAsync_ForwardsTheCancellationToken()
     {
-        GivenAnswers();
+        GivenDecision();
         using var cts = new CancellationTokenSource();
 
         await CreateService().TriageAsync(Request(), cts.Token);
 
-        await _jevClient.Received(1).EvaluateAsync(Arg.Any<JevSystemOneRequest>(), cts.Token);
+        await _engine.Received(1).EvaluateAsync(Arg.Any<TicketInput>(), cts.Token);
     }
 
     private TicketTriageService CreateService() => new(
-        _jevClient,
+        _engine,
         Options.Create(new TriageOptions()),
         NullLogger<TicketTriageService>.Instance);
 
-    private async Task<JevSystemOneRequest> CapturedRequestAsync()
+    private TicketInput CapturedInput()
     {
-        await Task.CompletedTask;
-
-        // ReceivedCalls() also reports property getters such as IsLive, which take no arguments.
-        var calls = _jevClient.ReceivedCalls()
-            .Where(call => call.GetMethodInfo().Name == nameof(IJevClient.EvaluateAsync))
+        var calls = _engine.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IDecisionEngine.EvaluateAsync))
             .ToList();
 
         calls.Should().NotBeEmpty();
 
-        return (JevSystemOneRequest)calls[^1].GetArguments()[0]!;
+        return (TicketInput)calls[^1].GetArguments()[0]!;
     }
 
     private static TriageTicketRequest Request(
@@ -215,45 +169,21 @@ public sealed class TicketTriageServiceTests
         string description = "A new analyst needs read-only access to the quarterly reporting portal.") =>
         new(title, description, RequesterRole.InternalSupport);
 
-    private void GivenAnswers(
+    private void GivenDecision(
         TicketCategory category = TicketCategory.AccessRequest,
-        double sensitiveProbability = 0.02)
+        double sensitiveProbability = 0.02,
+        AiProvider provider = AiProvider.Jev,
+        bool isLive = true)
     {
-        _jevClient.IsLive.Returns(true);
-        _jevClient
-            .EvaluateAsync(Arg.Any<JevSystemOneRequest>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new JevSystemOneResponse
-            {
-                Model = "jev-1.13.0",
-                Answers = new Dictionary<string, JevAnswer>
-                {
-                    [JevTriageQuestions.CategoryQuestionId] = new()
-                    {
-                        Type = "choice",
-                        Choice = category.ToString(),
-                        Confidence = 0.94,
-                    },
-                    [JevTriageQuestions.TargetTeamQuestionId] = new()
-                    {
-                        Type = "choice",
-                        Choice = nameof(TargetTeam.IdentityAccess),
-                        Confidence = 0.92,
-                    },
-                    [JevTriageQuestions.PriorityQuestionId] = new()
-                    {
-                        Type = "score",
-                        Score = 1.0,
-                        Probabilities = new Dictionary<string, double> { ["1"] = 0.95 },
-                        Confidence = 0.9,
-                    },
-                    [JevTriageQuestions.SensitiveDataQuestionId] = new()
-                    {
-                        Type = "noul",
-                        Noul = sensitiveProbability,
-                    },
-                    [JevTriageQuestions.HumanReviewQuestionId] = new() { Type = "noul", Noul = 0.05 },
-                },
-                Usage = new JevUsage { InputTokens = 100, OutputTokens = 20 },
-            }));
+        _engine.Provider.Returns(provider);
+        _engine.IsLive.Returns(isLive);
+        _engine
+            .EvaluateAsync(Arg.Any<TicketInput>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(TestData.CleanAssessment(
+                category: category,
+                team: TargetTeam.IdentityAccess,
+                priority: TicketPriority.Medium,
+                sensitiveProbability: sensitiveProbability,
+                provider: provider)));
     }
 }

@@ -55,6 +55,25 @@ appsettings.Production.json
 !.env.example
 !.env.*.example
 
+# Local AI: model weights, adapters, and downloaded caches never belong in git.
+# Local mode never downloads a model itself, but a developer running Ollama or
+# vLLM in the working tree easily leaves gigabytes behind.
+models/
+*.gguf
+*.safetensors
+*.bin
+*.onnx
+*.pt
+*.ggml
+.ollama/
+.cache/huggingface/
+.vllm_cache/
+
+# Benchmark output. Reports carry no ticket text, but they are run artefacts,
+# not source.
+benchmark-results/
+benchmark-*.json
+
 # ---------------------------------------------------------------------------
 # Node / Vite
 # ---------------------------------------------------------------------------

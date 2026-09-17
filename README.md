@@ -102,11 +102,11 @@ Clean architecture, with dependencies pointing inward only:
 JevTicketRouter.Api             ASP.NET Core minimal API, OpenAPI, ProblemDetails, CORS
         │  depends on
         ▼
-JevTicketRouter.Infrastructure  JevHttpClient, MockJevClient, options, resilience, DI
+JevTicketRouter.Infrastructure  Jev / Local / Mock engines, options, resilience, DI
         │  depends on
         ▼
-JevTicketRouter.Application     IJevClient, question set, answer mapper, DTOs, validation,
-        │  depends on          TicketTriageService (orchestration)
+JevTicketRouter.Application     IDecisionEngine, IJevClient, questions, mapper, DTOs,
+        │  depends on          validation, TicketTriageService (orchestration)
         ▼
 JevTicketRouter.Domain          Entities, enums, TriageRuleEngine, redaction. No dependencies.
 ```
@@ -142,7 +142,11 @@ prescribe.
 
 **Backend**
 - Clean architecture with enforced dependency boundaries and nullable reference types everywhere.
-- `POST /api/tickets/triage` and `GET /api/health`.
+- **Provider-agnostic AI layer**: one `IDecisionEngine` interface, three engines (Jev, Local, Mock),
+  selected by `AI_PROVIDER` through dependency injection. See *Cloud-to-Local Migration*.
+- **Local-first option**: any OpenAI-compatible endpoint inside your own network, with strict JSON
+  schema output, safe validation, and a startup guard that refuses non-local addresses.
+- `POST /api/tickets/triage`, `GET /api/health`, and `POST /api/benchmark`.
 - A single batched Jev call using all three primitives (Choice, Score, Noul).
 - Deterministic rule engine with full provenance and an audit trail of applied rules.
 - Sensitive-data redaction in both logs and API responses, plus a defence-in-depth pattern mask
@@ -152,7 +156,8 @@ prescribe.
 - Structured logging that never contains the ticket description or the API key.
 - Mock mode when no key is configured, clearly labelled in logs, the API, and the UI.
 - OpenAPI document with worked request and response examples, served through Swagger UI.
-- 106 tests across the rules, validation, redaction, answer mapping, both clients, and the HTTP API.
+- 227 tests across the rules, validation, redaction, answer mapping, provider selection, the
+  local endpoint guard, malformed-response handling, the benchmark, and the HTTP API.
 
 **Frontend**
 - Responsive dark-mode dashboard in Material UI, no template, no utility CSS framework.
@@ -167,7 +172,105 @@ prescribe.
 - Loading, empty, and readable error states; server-side validation errors surfaced inline.
 - **Fully bilingual interface (English and Persian) with real RTL support** — see below.
 - Persian and English ticket text both render correctly, independently of the interface language.
-- 59 tests with Vitest and React Testing Library.
+- A prominent provider badge: **Live Jev**, **Local AI**, or **Mock mode**.
+- 66 tests with Vitest and React Testing Library.
+
+---
+
+## Cloud-to-Local Migration
+
+**Jev is the evaluation provider. Local inference is the intended production architecture for
+restricted organisational data.**
+
+A support ticket is exactly the kind of text an organisation cannot casually send to a third party:
+it contains staff names, internal system names, customer references, and sometimes a credential
+someone pasted without thinking. TypeSafe Jev is excellent for proving the design — it is fast,
+calibrated, and purpose-built for structured decisions — but "our tickets are posted to an external
+API" is a sentence that ends many internal review meetings.
+
+So the AI provider is an implementation detail behind one interface:
+
+```csharp
+public interface IDecisionEngine
+{
+    Task<DecisionResult> EvaluateAsync(TicketInput input, CancellationToken cancellationToken);
+}
+```
+
+Three engines implement it. Everything above the interface — the deterministic rules, the redaction
+path, the API contract, the React client — is provider-agnostic and untouched by the choice.
+
+| Engine | Provider | What it calls |
+| --- | --- | --- |
+| `TypeSafeJevDecisionEngine` | `Jev` | `POST https://api.typesafe.ai/v1/systemone`, one batched call using Choice, Score, and Noul. |
+| `LocalOpenAiCompatibleDecisionEngine` | `Local` | `POST {LOCAL_AI_BASE_URL}/chat/completions` on a self-hosted endpoint. Never leaves your network. |
+| `MockDecisionEngine` | `Mock` | Nothing. Deterministic sample answers for development. |
+
+### Switching to Local mode
+
+Run any OpenAI-compatible server — Ollama, vLLM, llama.cpp, LM Studio, or an internal model gateway:
+
+```bash
+# Example with Ollama
+ollama serve
+ollama pull qwen2.5:7b-instruct
+```
+
+Then point the backend at it:
+
+```powershell
+$env:AI_PROVIDER      = "Local"
+$env:LOCAL_AI_BASE_URL = "http://localhost:11434/v1"
+$env:LOCAL_AI_MODEL    = "qwen2.5:7b-instruct"
+# $env:LOCAL_AI_API_KEY = "<token>"   # only if your endpoint requires one
+
+dotnet run --project backend/JevTicketRouter.Api
+```
+
+That is the entire migration. No code change, no frontend change. The startup log states which
+engine is running and why, the header badge switches to **Local AI**, and `GET /api/health` reports
+`"provider": "Local"`.
+
+### What Local mode guarantees
+
+- **No internet calls.** One request per evaluation, to the configured endpoint only. No telemetry,
+  no analytics, no cloud fallback, and no automatic model downloads. There is deliberately no
+  "fall back to Jev if the local model fails" path: silently shipping a ticket to a cloud API
+  because a local model timed out is precisely the failure this architecture exists to prevent.
+- **Non-local endpoints are refused.** `LOCAL_AI_BASE_URL` must resolve to loopback, an RFC 1918
+  private range, a link-local or unique-local address, or an internal host name. Anything else fails
+  at startup with an explanatory message rather than after the first ticket has already been sent.
+  An administrator can override this with `LocalAi:AllowPublicEndpoint=true` for a genuinely internal
+  gateway on a routable address — deliberately, never by accident.
+- **Malformed output is never repaired.** A local instruction-tuned model is far less disciplined
+  than a purpose-built classifier: it may wrap JSON in prose, invent a label, omit a field, or return
+  a confidence outside 0-1. Each of those is a validation failure returning `502` with a plain
+  explanation. Nothing is defaulted, inferred, or guessed — a ticket routed on an invented value
+  would be worse than one that failed visibly.
+- **Strict schema where supported.** The request sends `response_format: json_schema` with
+  `strict: true`, and the schema's enums are generated from the domain types, so adding a category
+  cannot leave the schema behind. Where a server does not honour it, the engine falls back to
+  `json_object` and still validates the body itself. The schema is a narrowing, never the only check.
+- **The same redaction rules apply.** Sensitive tickets are redacted before logging and before
+  serialisation, whichever engine decided.
+
+### Comparing the two providers
+
+With both configured, `POST /api/benchmark` runs a fixed corpus of **fictional** demo tickets against
+each and reports latency, schema-validity rate, and how often the two reach the same final routing:
+
+```bash
+curl -X POST http://localhost:5217/api/benchmark
+```
+
+The corpus lives in code and is never taken from submitted tickets. The report identifies cases by id
+and contains no ticket text, no model output, and no credential. Agreement is measured on the *final*
+routing, after the deterministic rules have run — two engines differing on a confidence but landing
+on the same team and priority is not a routing difference.
+
+This is the intended migration path: run Jev and a candidate local model side by side, look at where
+they disagree, pick a model whose agreement you are comfortable with, then switch `AI_PROVIDER` and
+drop the cloud dependency.
 
 ---
 
@@ -346,7 +449,8 @@ npm run dev
 | <http://localhost:5173> | The dashboard |
 | <http://localhost:5217/swagger> | Swagger UI |
 | <http://localhost:5217/openapi/v1.json> | The raw OpenAPI document |
-| <http://localhost:5217/api/health> | Status and current Jev mode |
+| <http://localhost:5217/api/health> | Status and the active AI provider |
+| `POST /api/benchmark` | Compare the configured providers over a fictional corpus |
 
 ### Trying the API directly
 
@@ -364,14 +468,14 @@ curl -X POST http://localhost:5217/api/tickets/triage \
 
 ## Running the tests
 
-**Backend** (106 tests — rules, validation, redaction, answer mapping, both Jev clients, and the HTTP
-API end to end):
+**Backend** (227 tests — rules, validation, redaction, answer mapping, provider selection, the local
+endpoint guard, malformed-response handling, the benchmark, and the HTTP API end to end):
 
 ```bash
 dotnet test
 ```
 
-**Frontend** (59 tests):
+**Frontend** (66 tests):
 
 ```bash
 cd frontend/jev-ticket-router-web
@@ -437,6 +541,11 @@ $env:Jev__ForceMockMode = "true"
 - CORS is restricted to the configured origins (the Vite dev server by default).
 - Swagger UI is served in all environments because this is a portfolio project. **Lock that down
   before any real deployment.**
+- **Local mode makes no internet calls**: no telemetry, no analytics, no cloud fallback, and no
+  automatic model downloads. A non-local `LOCAL_AI_BASE_URL` is refused at startup unless an
+  administrator explicitly overrides it.
+- No API key — for Jev or for a local gateway — is ever sent to the React frontend. The health
+  endpoint reports a provider name and nothing else.
 - The demo tickets use entirely fictional data. No real banking information, customer records,
   account numbers, or credentials appear anywhere in this repository.
 

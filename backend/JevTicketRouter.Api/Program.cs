@@ -54,7 +54,7 @@ builder.Services.AddOpenApi(options => options.AddDocumentTransformer<TriageExam
 
 var app = builder.Build();
 
-app.Services.LogJevMode();
+app.Services.LogDecisionEngine();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
@@ -78,6 +78,7 @@ app.UseSwaggerUI(options =>
 
 app.MapTicketTriageEndpoints();
 app.MapHealthEndpoints();
+app.MapBenchmarkEndpoints();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 

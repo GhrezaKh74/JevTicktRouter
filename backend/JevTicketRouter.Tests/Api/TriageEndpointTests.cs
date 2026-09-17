@@ -28,15 +28,44 @@ public sealed class TriageEndpointTests : IClassFixture<WebApplicationFactory<Pr
     public void Dispose() => _client.Dispose();
 
     [Fact]
-    public async Task Health_ReportsMockModeWhenNoKeyIsConfigured()
+    public async Task Health_ReportsMockProviderWhenNothingIsConfigured()
     {
         var response = await _client.GetAsync("/api/health", CancellationToken.None);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(CancellationToken.None);
-        body.GetProperty("jevMode").GetString().Should().Be("Mock");
+        body.GetProperty("provider").GetString().Should().Be("Mock");
+        body.GetProperty("isLive").GetBoolean().Should().BeFalse();
         body.GetProperty("status").GetString().Should().Be("Healthy");
+    }
+
+    [Fact]
+    public async Task Health_NeverLeaksACredentialOrAnEndpoint()
+    {
+        var raw = await (await _client.GetAsync("/api/health", CancellationToken.None))
+            .Content.ReadAsStringAsync(CancellationToken.None);
+
+        raw.Should().NotContain("ApiKey", "the health payload is public to the dashboard");
+        raw.Should().NotContain("http://");
+    }
+
+    [Fact]
+    public async Task Benchmark_RunsTheFictionalCorpusAndReportsMetricsOnly()
+    {
+        var response = await _client.PostAsync("/api/benchmark", content: null, CancellationToken.None);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var raw = await response.Content.ReadAsStringAsync(CancellationToken.None);
+        var body = JsonDocument.Parse(raw).RootElement;
+
+        body.GetProperty("ticketCount").GetInt32().Should().BeGreaterThan(0);
+        body.GetProperty("providers").EnumerateArray().Should().NotBeEmpty();
+
+        // The corpus lives server-side and its content must never come back out.
+        raw.Should().NotContain("reporting portal");
+        raw.Should().NotContain("phishing");
     }
 
     [Fact]
@@ -58,7 +87,8 @@ public sealed class TriageEndpointTests : IClassFixture<WebApplicationFactory<Pr
         body.GetProperty("targetTeam").GetProperty("value").GetString().Should().Be("IdentityAccess");
         body.GetProperty("priority").GetProperty("value").GetString().Should().NotBeNullOrWhiteSpace();
         body.GetProperty("routingSummary").GetString().Should().NotBeNullOrWhiteSpace();
-        body.GetProperty("jev").GetProperty("mode").GetString().Should().Be("Mock");
+        body.GetProperty("jev").GetProperty("provider").GetString().Should().Be("Mock");
+        body.GetProperty("jev").GetProperty("isLive").GetBoolean().Should().BeFalse();
         body.GetProperty("ticketId").GetString().Should().NotBeNullOrWhiteSpace();
     }
 

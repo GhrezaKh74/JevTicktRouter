@@ -1,3 +1,4 @@
+using JevTicketRouter.Domain.Decisions;
 using JevTicketRouter.Domain.Tickets;
 using JevTicketRouter.Domain.Triage;
 
@@ -7,7 +8,7 @@ namespace JevTicketRouter.Tests;
 internal static class TestData
 {
     /// <summary>A confident, unremarkable assessment that triggers no rule.</summary>
-    public static JevAssessment CleanAssessment(
+    public static DecisionResult CleanAssessment(
         TicketCategory category = TicketCategory.TechnicalIssue,
         TargetTeam team = TargetTeam.ApplicationSupport,
         TicketPriority priority = TicketPriority.Medium,
@@ -15,7 +16,8 @@ internal static class TestData
         double teamConfidence = 0.93,
         double priorityConfidence = 0.91,
         double sensitiveProbability = 0.02,
-        double humanReviewProbability = 0.05) =>
+        double humanReviewProbability = 0.05,
+        AiProvider provider = AiProvider.Jev) =>
         new(
             category,
             categoryConfidence,
@@ -26,7 +28,8 @@ internal static class TestData
             (int)priority,
             sensitiveProbability,
             humanReviewProbability,
-            "jev-1.13.0");
+            "jev-1.13.0",
+            provider);
 
     public static SupportTicket Ticket(
         string title = "Reporting portal returns an error on save",

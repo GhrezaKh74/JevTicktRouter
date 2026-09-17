@@ -10,12 +10,12 @@ import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import LinearProgress from '@mui/material/LinearProgress';
 import Skeleton from '@mui/material/Skeleton';
-import Chip from '@mui/material/Chip';
 import InsightsIcon from '@mui/icons-material/Insights';
 import type { TicketPriority, TriageTicketResponse } from '../../api/types';
 import { DecisionRow } from './DecisionRow';
 import { ConfidenceMeter } from './ConfidenceMeter';
 import { DeveloperDetails } from './DeveloperDetails';
+import { ProviderBadge } from '../../components/ProviderBadge';
 
 const PRIORITY_COLORS: Record<TicketPriority, 'success' | 'info' | 'warning' | 'error'> = {
   Low: 'success',
@@ -77,12 +77,7 @@ function Decision({
         subheader={t('result.ticketId', { id: result.ticketId })}
         slotProps={{ title: { variant: 'h2' }, subheader: { variant: 'caption' } }}
         action={
-          <Chip
-            size="small"
-            label={result.jev.mode === 'Live' ? t('header.modeLive') : t('header.modeMock')}
-            color={result.jev.mode === 'Live' ? 'success' : 'warning'}
-            variant="outlined"
-          />
+          <ProviderBadge provider={result.jev.provider} model={result.jev.model} withIcon={false} />
         }
       />
 

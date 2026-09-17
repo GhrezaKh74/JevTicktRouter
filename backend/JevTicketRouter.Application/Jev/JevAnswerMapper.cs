@@ -1,11 +1,12 @@
 using JevTicketRouter.Application.Jev.Abstractions;
 using JevTicketRouter.Application.Jev.Contracts;
+using JevTicketRouter.Domain.Decisions;
 using JevTicketRouter.Domain.Triage;
 
 namespace JevTicketRouter.Application.Jev;
 
 /// <summary>
-/// Maps the raw TypeSafe answers onto the domain's <see cref="JevAssessment"/>. Treats the response
+/// Maps the raw TypeSafe answers onto the domain's <see cref="DecisionResult"/>. Treats the response
 /// as untrusted input: a missing question, an unknown option, or an out-of-range score is reported as
 /// a <see cref="JevClientException"/> rather than silently producing a wrong routing decision.
 /// </summary>
@@ -13,8 +14,9 @@ public static class JevAnswerMapper
 {
     /// <summary>Maps a System One response into a domain assessment.</summary>
     /// <param name="response">The response returned by <see cref="IJevClient"/>.</param>
+    /// <param name="provider">Which engine produced the response, recorded on the result.</param>
     /// <exception cref="JevClientException">The response was missing or malformed for any question.</exception>
-    public static JevAssessment Map(JevSystemOneResponse response)
+    public static DecisionResult Map(JevSystemOneResponse response, AiProvider provider = AiProvider.Jev)
     {
         ArgumentNullException.ThrowIfNull(response);
 
@@ -22,7 +24,7 @@ public static class JevAnswerMapper
         var team = ReadChoice<TargetTeam>(response, JevTriageQuestions.TargetTeamQuestionId);
         var priority = ReadPriority(response);
 
-        return new JevAssessment(
+        return new DecisionResult(
             category.Value,
             category.Confidence,
             team.Value,
@@ -32,7 +34,8 @@ public static class JevAnswerMapper
             priority.RawScore,
             ReadNoul(response, JevTriageQuestions.SensitiveDataQuestionId),
             ReadNoul(response, JevTriageQuestions.HumanReviewQuestionId),
-            string.IsNullOrWhiteSpace(response.Model) ? "unknown" : response.Model);
+            string.IsNullOrWhiteSpace(response.Model) ? "unknown" : response.Model,
+            provider);
     }
 
     private static (TEnum Value, double Confidence) ReadChoice<TEnum>(

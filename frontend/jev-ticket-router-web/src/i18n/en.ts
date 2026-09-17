@@ -14,17 +14,19 @@ export const en = {
     github: 'View the source on GitHub',
     language: 'Language',
     modeLive: 'Live Jev',
+    modeLocal: 'Local AI',
     modeMock: 'Mock mode',
     modeUnknown: 'API offline',
     modeLiveHint: 'Calling the TypeSafe API with model {{model}}.',
-    modeMockHint:
-      'No TYPESAFE_API_KEY is configured, so triage returns deterministic sample answers.',
-    modeUnknownHint: 'The API could not be reached, so its mode is unknown.',
+    modeLocalHint:
+      'Decisions are made by a model inside your own network. No request leaves the organisation.',
+    modeMockHint: 'No AI provider is configured, so triage returns deterministic sample answers.',
+    modeUnknownHint: 'The API could not be reached, so its provider is unknown.',
   },
 
   form: {
     heading: 'Submit a ticket',
-    subheading: 'Persian or English. Nothing you type here leaves your machine in mock mode.',
+    subheading: 'Persian or English — both are handled the same way.',
     title: 'Title',
     titlePlaceholder: 'Short summary of the problem',
     description: 'Description',
@@ -110,7 +112,7 @@ export const en = {
     redactedBanner:
       'This ticket was flagged as containing sensitive data, so the server redacted the ticket text before sending this response. The raw description is not available here.',
     jevResponse: 'Jev structured response (sanitised)',
-    mode: 'mode: {{value}}',
+    provider: 'provider: {{value}}',
     model: 'model: {{value}}',
     latency: 'latency: {{value}} ms',
     rulesApplied: 'Deterministic rules applied ({{count}})',

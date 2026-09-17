@@ -43,10 +43,11 @@ public sealed record DecidedFieldDto<T>(
 public sealed record AppliedRuleDto(string Id, string Description, string Effect);
 
 /// <summary>
-/// Sanitised diagnostics about the Jev call, surfaced in the UI's developer-details panel. Contains
-/// no ticket text and never any credential.
+/// Sanitised diagnostics about the decision-engine call, surfaced in the UI's developer-details
+/// panel. Contains no ticket text and never any credential.
 /// </summary>
-/// <param name="Mode">Either <c>Live</c> or <c>Mock</c>.</param>
+/// <param name="Provider">Which engine decided: <c>Jev</c>, <c>Local</c>, or <c>Mock</c>.</param>
+/// <param name="IsLive">False when the answer came from deterministic sample data.</param>
 /// <param name="Model">The versioned model id that answered.</param>
 /// <param name="LatencyMs">How long the evaluation took, in milliseconds.</param>
 /// <param name="PriorityScore">The raw probability-weighted priority score across the levels.</param>
@@ -56,7 +57,8 @@ public sealed record AppliedRuleDto(string Id, string Description, string Effect
 /// What was sent to Jev as state, redacted when the ticket was flagged as sensitive.
 /// </param>
 public sealed record JevDiagnosticsDto(
-    string Mode,
+    string Provider,
+    bool IsLive,
     string Model,
     long LatencyMs,
     double PriorityScore,

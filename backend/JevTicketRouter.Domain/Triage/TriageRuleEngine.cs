@@ -1,8 +1,8 @@
 namespace JevTicketRouter.Domain.Triage;
 
 /// <summary>
-/// Applies the deterministic business rules that sit between Jev's assessment and the final routing
-/// decision. Jev proposes; this engine disposes. Every override is recorded as an
+/// Applies the deterministic business rules that sit between the decision engine's assessment and
+/// the final routing decision. The engine proposes; this code disposes, whichever provider ran. Every override is recorded as an
 /// <see cref="AppliedRule"/> so the outcome can always be explained.
 /// </summary>
 public static class TriageRuleEngine
@@ -16,16 +16,16 @@ public static class TriageRuleEngine
     /// <summary>Redaction triggered by detected sensitive data.</summary>
     public const string SensitiveDataRedactionRuleId = "SENSITIVE_DATA_REDACTION";
 
-    /// <summary>Escalation that Jev itself asked for.</summary>
+    /// <summary>Escalation the decision engine itself asked for.</summary>
     public const string ModelRequestedReviewRuleId = "MODEL_REQUESTED_REVIEW";
 
     /// <summary>
-    /// Turns a Jev assessment into the final decision.
+    /// Turns an engine assessment into the final decision.
     /// </summary>
     /// <param name="assessment">What the model proposed.</param>
     /// <param name="thresholds">Confidence and probability thresholds; defaults when null.</param>
     /// <returns>The final decision, including the provenance of every field.</returns>
-    public static TriageDecision Apply(JevAssessment assessment, TriageThresholds? thresholds = null)
+    public static TriageDecision Apply(DecisionResult assessment, TriageThresholds? thresholds = null)
     {
         ArgumentNullException.ThrowIfNull(assessment);
         thresholds ??= TriageThresholds.Default;
@@ -51,7 +51,7 @@ public static class TriageRuleEngine
         {
             rules.Add(new AppliedRule(
                 ModelRequestedReviewRuleId,
-                "Jev estimated a high probability that this ticket needs a human.",
+                "The decision engine estimated a high probability that this ticket needs a human.",
                 $"needsHumanReview kept as true (noul probability {assessment.HumanReviewProbability:F3} " +
                 $">= {thresholds.HumanReviewProbabilityThreshold:F2})."));
         }
@@ -79,7 +79,7 @@ public static class TriageRuleEngine
             needsHumanReview = needsHumanReview.OverriddenBy(true);
             rules.Add(new AppliedRule(
                 LowConfidenceRuleId,
-                $"Jev confidence below {thresholds.MinimumConfidence:F2} on any routing field requires human review.",
+                $"Model confidence below {thresholds.MinimumConfidence:F2} on any routing field requires human review.",
                 $"needsHumanReview forced to true because {string.Join(", ", lowConfidenceFields)}."));
         }
 
@@ -103,7 +103,7 @@ public static class TriageRuleEngine
             BuildRoutingSummary(targetTeam.Value, priority.Value, needsHumanReview.Value));
     }
 
-    private static List<string> CollectLowConfidenceFields(JevAssessment assessment, double minimum)
+    private static List<string> CollectLowConfidenceFields(DecisionResult assessment, double minimum)
     {
         var fields = new List<string>(3);
 

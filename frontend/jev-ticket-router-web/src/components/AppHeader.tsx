@@ -2,7 +2,6 @@ import { useTranslation } from 'react-i18next';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
-import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Box from '@mui/material/Box';
@@ -11,6 +10,7 @@ import GitHubIcon from '@mui/icons-material/GitHub';
 import HubIcon from '@mui/icons-material/Hub';
 import type { HealthResponse } from '../api/types';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { ProviderBadge } from './ProviderBadge';
 
 /** Replace with the real repository URL when publishing. */
 const GITHUB_URL = 'https://github.com/GhrezaKh74/JevTicktRouter';
@@ -47,7 +47,7 @@ export function AppHeader({ health, isLoading }: AppHeaderProps) {
         {isLoading ? (
           <Skeleton variant="rounded" width={104} height={28} data-testid="mode-badge-skeleton" />
         ) : (
-          <ModeBadge mode={health?.jevMode} model={health?.model} />
+          <ProviderBadge provider={health?.provider} model={health?.model} />
         )}
 
         <LanguageSwitcher />
@@ -66,43 +66,5 @@ export function AppHeader({ health, isLoading }: AppHeaderProps) {
         </Tooltip>
       </Toolbar>
     </AppBar>
-  );
-}
-
-function ModeBadge({
-  mode,
-  model,
-}: {
-  readonly mode: 'Live' | 'Mock' | undefined;
-  readonly model: string | undefined;
-}) {
-  const { t } = useTranslation();
-
-  if (mode === undefined) {
-    return (
-      <Tooltip title={t('header.modeUnknownHint')} describeChild>
-        <Chip label={t('header.modeUnknown')} color="error" variant="outlined" size="small" />
-      </Tooltip>
-    );
-  }
-
-  const isLive = mode === 'Live';
-
-  return (
-    <Tooltip
-      title={
-        isLive
-          ? t('header.modeLiveHint', { model: model ?? 'jev-latest' })
-          : t('header.modeMockHint')
-      }
-      describeChild
-    >
-      <Chip
-        label={isLive ? t('header.modeLive') : t('header.modeMock')}
-        color={isLive ? 'success' : 'warning'}
-        variant={isLive ? 'filled' : 'outlined'}
-        size="small"
-      />
-    </Tooltip>
   );
 }

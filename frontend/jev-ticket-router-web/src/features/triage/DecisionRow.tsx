@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
@@ -16,9 +17,9 @@ interface DecisionRowProps {
 }
 
 /**
- * One final decision, plus an explicit marker when a deterministic rule overrode what Jev proposed.
- * Making the override visible is the point of the whole panel: the rule engine is the authority, and
- * the UI should never let that be mistaken for a model output.
+ * One final decision, plus an explicit marker when a deterministic rule decided it.
+ * Making that visible is the point of the whole panel: the rule engine is the authority, and the UI
+ * should never let that be mistaken for a model output.
  */
 export function DecisionRow({
   label,
@@ -28,6 +29,8 @@ export function DecisionRow({
   wasOverridden,
   color = 'default',
 }: DecisionRowProps) {
+  const { t } = useTranslation();
+
   return (
     <Box
       sx={{
@@ -49,22 +52,22 @@ export function DecisionRow({
           <Tooltip
             title={
               wasOverridden
-                ? `A business rule set this to ${value}. Jev proposed ${modelValue}.`
-                : `A business rule confirmed this value. Jev also proposed ${modelValue}.`
+                ? t('decision.ruleOverrodeHint', { value, modelValue })
+                : t('decision.ruleConfirmedHint', { modelValue })
             }
             describeChild
           >
             <Chip
               icon={<GavelIcon />}
-              label="rule"
+              label={t('decision.byRule')}
               size="small"
               color="secondary"
               variant={wasOverridden ? 'filled' : 'outlined'}
             />
           </Tooltip>
         ) : (
-          <Tooltip title="This value is exactly what Jev returned." describeChild>
-            <Chip label="Jev" size="small" variant="outlined" />
+          <Tooltip title={t('decision.jevHint')} describeChild>
+            <Chip label={t('decision.byJev')} size="small" variant="outlined" />
           </Tooltip>
         )}
       </Stack>

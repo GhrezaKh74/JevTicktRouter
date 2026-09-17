@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { ResultPanel } from './ResultPanel';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { cleanResult, escalatedResult } from '../../test/fixtures';
+import { en } from '../../i18n';
 
 describe('ResultPanel', () => {
   it('shows the empty state before anything has been triaged', () => {
@@ -47,13 +48,16 @@ describe('ResultPanel', () => {
       />,
     );
 
-    expect(screen.getByText('AccessRequest')).toBeInTheDocument();
-    expect(screen.getByText('IdentityAccess')).toBeInTheDocument();
-    expect(screen.getByText('Low')).toBeInTheDocument();
-    expect(screen.getByText('None detected')).toBeInTheDocument();
-    expect(screen.getByText('Not required')).toBeInTheDocument();
-    expect(screen.getByText('Ready to auto-route')).toBeInTheDocument();
-    expect(screen.getByText(cleanResult.routingSummary)).toBeInTheDocument();
+    expect(screen.getByText(en.categories.AccessRequest)).toBeInTheDocument();
+    expect(screen.getByText(en.teams.IdentityAccess)).toBeInTheDocument();
+    expect(screen.getByText(en.priorities.Low)).toBeInTheDocument();
+    expect(screen.getByText(en.result.sensitiveNone)).toBeInTheDocument();
+    expect(screen.getByText(en.result.reviewNotRequired)).toBeInTheDocument();
+    expect(screen.getByText(en.result.autoRouted)).toBeInTheDocument();
+    // The summary sentence is composed in the UI from the decided fields, not taken from the server.
+    expect(
+      screen.getByText('Auto-routed to Identity & Access at Low priority.'),
+    ).toBeInTheDocument();
   });
 
   it('shows each confidence score as a percentage', () => {
@@ -95,9 +99,9 @@ describe('ResultPanel', () => {
       />,
     );
 
-    expect(screen.getByText('Held for human review')).toBeInTheDocument();
-    expect(screen.getByText('Required')).toBeInTheDocument();
-    expect(screen.getAllByText('rule').length).toBeGreaterThan(0);
+    expect(screen.getByText(en.result.escalated)).toBeInTheDocument();
+    expect(screen.getByText(en.result.reviewRequired)).toBeInTheDocument();
+    expect(screen.getAllByText(en.decision.byRule).length).toBeGreaterThan(0);
   });
 
   it('attributes a rule-confirmed field to the rule, not to Jev', () => {
@@ -118,7 +122,7 @@ describe('ResultPanel', () => {
       <ResultPanel result={confirmed} isLoading={false} error={null} confidenceThreshold={0.75} />,
     );
 
-    expect(screen.getAllByText('rule').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(en.decision.byRule).length).toBeGreaterThan(0);
   });
 
   it('warns that sensitive data was detected', () => {
@@ -131,7 +135,7 @@ describe('ResultPanel', () => {
       />,
     );
 
-    expect(screen.getByText('Detected')).toBeInTheDocument();
+    expect(screen.getByText(en.result.sensitiveDetected)).toBeInTheDocument();
     expect(screen.getByText(/has been redacted from the structured logs/i)).toBeInTheDocument();
   });
 
@@ -189,6 +193,6 @@ describe('ResultPanel', () => {
 
     await user.click(screen.getByRole('button', { name: /developer details/i }));
 
-    expect(screen.getByText(/No rule changed Jev's proposal/i)).toBeInTheDocument();
+    expect(screen.getByText(en.devDetails.noRules)).toBeInTheDocument();
   });
 });

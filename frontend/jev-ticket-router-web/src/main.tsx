@@ -1,10 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import CssBaseline from '@mui/material/CssBaseline';
-import { ThemeProvider } from '@mui/material/styles';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
-import { theme } from './theme';
+import { LocaleProvider } from './providers/LocaleProvider';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,10 +19,10 @@ if (!container) {
 createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
+      {/* LocaleProvider owns the language, the direction, the Emotion cache, and the theme. */}
+      <LocaleProvider>
         <App />
-      </ThemeProvider>
+      </LocaleProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

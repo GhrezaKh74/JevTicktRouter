@@ -25,6 +25,10 @@ Every field in the response says whether the value came from the model or from a
 | --- | --- |
 | ![A phishing report escalated to human review with its text redacted](docs/screenshots/03-security-redacted.png) | ![The developer panel showing the sanitised Jev response, the rules that fired, and the final API response](docs/screenshots/04-developer-details.png) |
 
+| Persian interface, fully mirrored (RTL) | Persian routing decision |
+| --- | --- |
+| ![The dashboard in Persian with the layout mirrored right-to-left](docs/screenshots/06-persian-rtl.png) | ![A routing decision rendered in Persian with Persian digits](docs/screenshots/07-persian-result.png) |
+
 <p align="center">
   <img src="docs/screenshots/05-mobile.png" alt="The dashboard on a narrow mobile viewport" width="320" />
 </p>
@@ -161,8 +165,47 @@ prescribe.
 - Collapsible developer panel: sanitised Jev response, the rules that fired, and the final API
   response — never the raw description when sensitive data was detected.
 - Loading, empty, and readable error states; server-side validation errors surfaced inline.
-- Persian and English ticket text both render correctly.
-- 46 tests with Vitest and React Testing Library.
+- **Fully bilingual interface (English and Persian) with real RTL support** — see below.
+- Persian and English ticket text both render correctly, independently of the interface language.
+- 59 tests with Vitest and React Testing Library.
+
+---
+
+## Internationalisation
+
+The interface ships in **English** and **Persian (فارسی)**, switchable at runtime from the header.
+The choice is remembered in `localStorage` and falls back to the browser's preferred language.
+
+Switching to Persian does three separate things, and skipping any one of them leaves the page only
+half-translated:
+
+| Concern | How it is handled |
+| --- | --- |
+| Strings | `i18next` + `react-i18next`, with resources in `src/i18n/`. |
+| MUI's own layout logic | `direction: 'rtl'` on the theme. |
+| The emitted CSS | A second Emotion cache using `stylis-plugin-rtl`, because MUI writes physical properties such as `margin-left` that the theme alone will not flip. |
+| The document | `dir` and `lang` set on `<html>`, so the browser applies the bidi algorithm and screen readers announce the right language. |
+| Numbers | `Intl.NumberFormat`, so Persian shows ۸۵٪ rather than 85%. |
+
+Two details worth calling out:
+
+- **The ticket's language is independent of the interface's.** The text inputs carry `dir="auto"`,
+  so a Persian ticket reads right-to-left even while the UI is in English, and vice versa. That is
+  the whole point of the app — triage handles either language — so the demo ticket bodies are never
+  translated.
+- **Translations cannot silently drift.** `Messages` is derived from the English resource, so
+  Persian is type-checked against it: a key added in English and forgotten in Persian is a compile
+  error, not a blank label. A test also walks both trees and asserts the interpolation placeholders
+  match.
+
+Server-generated strings are treated deliberately. The user-facing routing sentence is composed in
+the client from the decided fields, so it is properly localised. The `effect` line on each applied
+rule is left exactly as the server wrote it — it is an audit record carrying computed values, and
+belongs in a log, not in translated prose. Rule *descriptions* are keyed by the stable rule id and
+translated.
+
+Adding a third language means adding one file under `src/i18n/`, listing it in `LOCALES`, and giving
+it a direction — no component changes.
 
 ---
 
@@ -328,7 +371,7 @@ API end to end):
 dotnet test
 ```
 
-**Frontend** (46 tests):
+**Frontend** (59 tests):
 
 ```bash
 cd frontend/jev-ticket-router-web
@@ -435,6 +478,9 @@ $env:Jev__ForceMockMode = "true"
 | @tanstack/react-query | 5.103.1 |
 | react-hook-form | 7.88.0 |
 | zod | 4.6.5 |
+| i18next | 26.4.2 |
+| react-i18next | 17.0.14 |
+| stylis-plugin-rtl | 2.1.1 |
 | @hookform/resolvers | 5.9.1 |
 | vitest | 5.0.1 |
 | @vitest/coverage-v8 | 5.0.1 |

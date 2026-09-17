@@ -1,23 +1,25 @@
 import type { TicketFormValues } from './ticketSchema';
 
-/** A one-click sample ticket. */
+/** Identifies a demo ticket. Doubles as its translation key under `demos`. */
+export type DemoTicketId = 'persian-technical' | 'english-access' | 'security-review';
+
+/** A one-click sample ticket. Its label and hint are translated; the ticket text is not. */
 export interface DemoTicket {
-  readonly id: string;
-  readonly label: string;
-  readonly hint: string;
+  readonly id: DemoTicketId;
   readonly values: TicketFormValues;
 }
 
 /**
  * Three fictional tickets that exercise the interesting paths: clean auto-routing in Persian, clean
  * auto-routing in English, and a security case that the deterministic rules escalate and redact.
+ *
+ * The ticket bodies stay in their original language whatever the interface language is — the point
+ * of the demo is that triage handles either, so translating them would defeat it.
  * All names, numbers, and systems here are invented.
  */
 export const demoTickets: readonly DemoTicket[] = [
   {
     id: 'persian-technical',
-    label: 'Persian · technical issue',
-    hint: 'A branch teller reporting an application fault, in Persian.',
     values: {
       title: 'خطا هنگام ثبت تراکنش در سامانه شعبه',
       description:
@@ -28,8 +30,6 @@ export const demoTickets: readonly DemoTicket[] = [
   },
   {
     id: 'english-access',
-    label: 'English · access request',
-    hint: 'A routine, pre-approved onboarding request.',
     values: {
       title: 'Access to the reporting portal for a new analyst',
       description:
@@ -41,8 +41,6 @@ export const demoTickets: readonly DemoTicket[] = [
   },
   {
     id: 'security-review',
-    label: 'Security · needs review',
-    hint: 'A phishing report that the rules escalate and redact.',
     values: {
       title: 'Suspicious email asking staff to confirm their password',
       description:

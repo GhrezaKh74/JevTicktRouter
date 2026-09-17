@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -7,7 +8,15 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import type { TriageTicketResponse } from '../../api/types';
+import type { AppliedRule, TriageTicketResponse } from '../../api/types';
+import { en } from '../../i18n';
+
+/** Rule ids the UI has its own translation for. */
+type KnownRuleId = keyof typeof en.rules;
+
+function isKnownRule(id: string): id is KnownRuleId {
+  return Object.hasOwn(en.rules, id);
+}
 
 interface DeveloperDetailsProps {
   readonly result: TriageTicketResponse;
@@ -21,29 +30,32 @@ interface DeveloperDetailsProps {
  * unredacted copy on the client to leak here. The banner makes that explicit rather than silent.
  */
 export function DeveloperDetails({ result }: DeveloperDetailsProps) {
+  const { t } = useTranslation();
   const redacted = result.jev.stateSummary.redacted;
 
   return (
-    <Box component="section" aria-label="Developer details">
+    <Box component="section" aria-label={t('devDetails.heading')}>
       <Accordion disableGutters elevation={0} variant="outlined">
         <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="developer-details-content">
-          <Typography variant="subtitle2">Developer details</Typography>
+          <Typography variant="subtitle2">{t('devDetails.heading')}</Typography>
         </AccordionSummary>
 
         <AccordionDetails id="developer-details-content">
           <Stack spacing={2}>
             {redacted && (
               <Alert severity="warning" variant="outlined">
-                This ticket was flagged as containing sensitive data, so the server redacted the
-                ticket text before sending this response. The raw description is not available here.
+                {t('devDetails.redactedBanner')}
               </Alert>
             )}
 
-            <Section title="Jev structured response (sanitised)">
+            <Section title={t('devDetails.jevResponse')}>
               <Stack direction="row" spacing={1} useFlexGap sx={{ mb: 1, flexWrap: 'wrap' }}>
-                <Chip size="small" label={`mode: ${result.jev.mode}`} />
-                <Chip size="small" label={`model: ${result.jev.model}`} />
-                <Chip size="small" label={`latency: ${result.jev.latencyMs} ms`} />
+                <Chip size="small" label={t('devDetails.mode', { value: result.jev.mode })} />
+                <Chip size="small" label={t('devDetails.model', { value: result.jev.model })} />
+                <Chip
+                  size="small"
+                  label={t('devDetails.latency', { value: result.jev.latencyMs })}
+                />
               </Stack>
               <CodeBlock
                 value={{
@@ -66,37 +78,49 @@ export function DeveloperDetails({ result }: DeveloperDetailsProps) {
               />
             </Section>
 
-            <Section title={`Deterministic rules applied (${result.appliedRules.length})`}>
+            <Section title={t('devDetails.rulesApplied', { count: result.appliedRules.length })}>
               {result.appliedRules.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
-                  No rule changed Jev&apos;s proposal. The model was confident and nothing required
-                  escalation.
+                  {t('devDetails.noRules')}
                 </Typography>
               ) : (
                 <Stack spacing={1.5} component="ul" sx={{ listStyle: 'none', pl: 0, m: 0 }}>
                   {result.appliedRules.map((rule) => (
-                    <Box component="li" key={rule.id}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {rule.id}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {rule.description}
-                      </Typography>
-                      <Typography variant="caption" color="secondary.main">
-                        {rule.effect}
-                      </Typography>
-                    </Box>
+                    <RuleItem key={rule.id} rule={rule} />
                   ))}
                 </Stack>
               )}
             </Section>
 
-            <Section title="Final API response">
+            <Section title={t('devDetails.finalResponse')}>
               <CodeBlock value={result} />
             </Section>
           </Stack>
         </AccordionDetails>
       </Accordion>
+    </Box>
+  );
+}
+
+/**
+ * One applied rule. The id and the effect are the server's audit record and stay exactly as sent —
+ * the effect carries computed values and belongs in a log, not in prose. Only the description, which
+ * is keyed by the stable rule id, is translated.
+ */
+function RuleItem({ rule }: { readonly rule: AppliedRule }) {
+  const { t } = useTranslation();
+
+  return (
+    <Box component="li">
+      <Typography variant="body2" sx={{ fontWeight: 600 }} dir="ltr">
+        {rule.id}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {isKnownRule(rule.id) ? t(`rules.${rule.id}`) : rule.description}
+      </Typography>
+      <Typography variant="caption" color="secondary.main" dir="ltr" sx={{ display: 'block' }}>
+        {rule.effect}
+      </Typography>
     </Box>
   );
 }
@@ -122,6 +146,7 @@ function CodeBlock({ value }: { readonly value: unknown }) {
   return (
     <Box
       component="pre"
+      dir="ltr"
       sx={{
         m: 0,
         p: 1.5,
@@ -133,6 +158,7 @@ function CodeBlock({ value }: { readonly value: unknown }) {
         maxHeight: 320,
         fontSize: '0.75rem',
         lineHeight: 1.6,
+        textAlign: 'left',
       }}
     >
       <code>{JSON.stringify(value, null, 2)}</code>

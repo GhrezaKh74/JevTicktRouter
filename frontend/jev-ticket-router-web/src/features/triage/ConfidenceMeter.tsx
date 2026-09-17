@@ -1,7 +1,10 @@
+import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
+import { formatPercent } from '../../i18n';
+import { useLocale } from '../../providers/useLocale';
 
 interface ConfidenceMeterProps {
   readonly label: string;
@@ -17,18 +20,18 @@ interface ConfidenceMeterProps {
  * distinguish the colours.
  */
 export function ConfidenceMeter({ label, confidence, threshold }: ConfidenceMeterProps) {
+  const { t } = useTranslation();
+  const { locale } = useLocale();
+
   if (confidence === null) {
     return (
       <Box>
-        <Row label={label} value="not reported" />
-        <Tooltip
-          title="Yes/no (noul) answers return a probability but no confidence value."
-          describeChild
-        >
+        <Row label={label} value={t('confidence.notReported')} />
+        <Tooltip title={t('confidence.noulHint')} describeChild>
           <LinearProgress
             variant="determinate"
             value={0}
-            aria-label={`${label}: no confidence reported`}
+            aria-label={t('confidence.noneAria', { label })}
           />
         </Tooltip>
       </Box>
@@ -37,25 +40,29 @@ export function ConfidenceMeter({ label, confidence, threshold }: ConfidenceMete
 
   const percent = Math.round(confidence * 100);
   const isBelowThreshold = confidence < threshold;
+  const formatted = formatPercent(percent / 100, locale);
 
   return (
     <Box>
       <Row
         label={label}
-        value={`${percent}%${isBelowThreshold ? ' · below threshold' : ''}`}
+        value={
+          isBelowThreshold ? t('confidence.belowThreshold', { percent: formatted }) : formatted
+        }
         emphasis={isBelowThreshold}
       />
       <Tooltip
-        title={`Jev reported ${percent}% confidence. The escalation threshold is ${Math.round(
-          threshold * 100,
-        )}%.`}
+        title={t('confidence.meterHint', {
+          percent: formatted,
+          threshold: formatPercent(threshold, locale),
+        })}
         describeChild
       >
         <LinearProgress
           variant="determinate"
           value={percent}
           color={isBelowThreshold ? 'warning' : 'success'}
-          aria-label={`${label} confidence`}
+          aria-label={t('confidence.meterAria', { label })}
           aria-valuenow={percent}
           aria-valuemin={0}
           aria-valuemax={100}

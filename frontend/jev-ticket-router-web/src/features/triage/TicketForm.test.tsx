@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { TicketForm } from './TicketForm';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { demoTickets } from './demoTickets';
+import { demoLabel } from '../../test/i18nHelpers';
 
 describe('TicketForm', () => {
   it('renders accessible, labelled fields', () => {
@@ -75,7 +76,7 @@ describe('TicketForm', () => {
     renderWithProviders(<TicketForm onSubmit={vi.fn()} isSubmitting={false} />);
 
     for (const demo of demoTickets) {
-      expect(screen.getByRole('button', { name: demo.label })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: demoLabel(demo.id) })).toBeInTheDocument();
     }
 
     expect(demoTickets).toHaveLength(3);
@@ -87,7 +88,7 @@ describe('TicketForm', () => {
     renderWithProviders(<TicketForm onSubmit={vi.fn()} isSubmitting={false} />);
 
     const persianDemo = demoTickets[0]!;
-    await user.click(screen.getByRole('button', { name: persianDemo.label }));
+    await user.click(screen.getByRole('button', { name: demoLabel(persianDemo.id) }));
 
     await waitFor(() => {
       expect(screen.getByRole('textbox', { name: /title/i })).toHaveValue(persianDemo.values.title);

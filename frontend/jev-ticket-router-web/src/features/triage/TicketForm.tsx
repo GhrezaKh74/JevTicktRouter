@@ -1,5 +1,7 @@
+import { useEffect, useMemo } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useTranslation } from 'react-i18next';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
@@ -13,15 +15,14 @@ import Tooltip from '@mui/material/Tooltip';
 import CircularProgress from '@mui/material/CircularProgress';
 import SendIcon from '@mui/icons-material/Send';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import { emptyTicket, ticketSchema, type TicketFormValues } from './ticketSchema';
+import {
+  TICKET_LIMITS,
+  createTicketSchema,
+  emptyTicket,
+  type TicketFormValues,
+} from './ticketSchema';
 import { demoTickets } from './demoTickets';
-import { REQUESTER_ROLES, type RequesterRole } from '../../api/types';
-
-const ROLE_LABELS: Record<RequesterRole, string> = {
-  BranchEmployee: 'Branch employee',
-  Customer: 'Customer',
-  InternalSupport: 'Internal support',
-};
+import { REQUESTER_ROLES } from '../../api/types';
 
 interface TicketFormProps {
   readonly onSubmit: (values: TicketFormValues) => void;
@@ -33,18 +34,36 @@ interface TicketFormProps {
 /**
  * The ticket form. Validated with Zod through React Hook Form, and pre-fillable from the three demo
  * tickets so the dashboard can be exercised in one click.
+ *
+ * The text inputs carry `dir="auto"`, so a Persian ticket reads right-to-left even while the
+ * interface is in English, and an English ticket reads left-to-right while the interface is in
+ * Persian. The ticket's language and the interface's language are independent here.
  */
 export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormProps) {
+  const { t, i18n } = useTranslation();
+
+  // react-i18next hands back a fresh `t` on every language change, so this rebuilds with it.
+  const schema = useMemo(() => createTicketSchema(t), [t]);
+
   const {
     control,
     handleSubmit,
     reset,
-    formState: { errors },
+    trigger,
+    formState: { errors, isSubmitted },
   } = useForm<TicketFormValues>({
-    resolver: zodResolver(ticketSchema),
+    resolver: zodResolver(schema),
     defaultValues: emptyTicket,
     mode: 'onTouched',
   });
+
+  // Re-run validation after a language change so any visible message is re-rendered in the new
+  // language rather than left stranded in the old one.
+  useEffect(() => {
+    if (isSubmitted) {
+      void trigger();
+    }
+  }, [i18n.language, isSubmitted, trigger]);
 
   const serverError = (field: keyof TicketFormValues): string | undefined => {
     if (!serverErrors) {
@@ -63,8 +82,8 @@ export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormP
     <Card component="section" aria-labelledby="ticket-form-heading">
       <CardHeader
         id="ticket-form-heading"
-        title="Submit a ticket"
-        subheader="Persian or English. Nothing you type here leaves your machine in mock mode."
+        title={t('form.heading')}
+        subheader={t('form.subheading')}
         slotProps={{ title: { variant: 'h2' }, subheader: { variant: 'caption' } }}
       />
 
@@ -83,13 +102,13 @@ export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormP
             render={({ field }) => (
               <TextField
                 {...field}
-                label="Title"
-                placeholder="Short summary of the problem"
+                label={t('form.title')}
+                placeholder={t('form.titlePlaceholder')}
                 required
                 fullWidth
                 error={Boolean(errors.title ?? serverError('title'))}
                 helperText={errors.title?.message ?? serverError('title') ?? ' '}
-                slotProps={{ htmlInput: { maxLength: 200, 'aria-describedby': 'title-helper' } }}
+                slotProps={{ htmlInput: { maxLength: TICKET_LIMITS.titleMax, dir: 'auto' } }}
               />
             )}
           />
@@ -100,8 +119,8 @@ export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormP
             render={({ field }) => (
               <TextField
                 {...field}
-                label="Description"
-                placeholder="What happened, what you expected, and anything you already tried"
+                label={t('form.description')}
+                placeholder={t('form.descriptionPlaceholder')}
                 required
                 fullWidth
                 multiline
@@ -110,9 +129,9 @@ export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormP
                 helperText={
                   errors.description?.message ??
                   serverError('description') ??
-                  'Avoid pasting real credentials or account numbers.'
+                  t('form.descriptionHint')
                 }
-                slotProps={{ htmlInput: { maxLength: 5000 } }}
+                slotProps={{ htmlInput: { maxLength: TICKET_LIMITS.descriptionMax, dir: 'auto' } }}
               />
             )}
           />
@@ -124,7 +143,7 @@ export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormP
               <TextField
                 {...field}
                 select
-                label="Requester role"
+                label={t('form.requesterRole')}
                 required
                 fullWidth
                 error={Boolean(errors.requesterRole ?? serverError('requesterRole'))}
@@ -132,7 +151,7 @@ export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormP
               >
                 {REQUESTER_ROLES.map((role) => (
                   <MenuItem key={role} value={role}>
-                    {ROLE_LABELS[role]}
+                    {t(`roles.${role}`)}
                   </MenuItem>
                 ))}
               </TextField>
@@ -149,10 +168,10 @@ export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormP
               }
               fullWidth
             >
-              {isSubmitting ? 'Analysing…' : 'Triage ticket'}
+              {isSubmitting ? t('form.submitting') : t('form.submit')}
             </Button>
 
-            <Tooltip title="Clear the form" describeChild>
+            <Tooltip title={t('form.reset')} describeChild>
               <span>
                 <Button
                   type="button"
@@ -162,7 +181,7 @@ export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormP
                   onClick={() => {
                     reset(emptyTicket);
                   }}
-                  aria-label="Clear the form"
+                  aria-label={t('form.reset')}
                 >
                   <RestartAltIcon fontSize="small" />
                 </Button>
@@ -172,13 +191,18 @@ export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormP
 
           <Divider flexItem>
             <Typography variant="caption" color="text.secondary">
-              or try a sample
+              {t('form.samplesDivider')}
             </Typography>
           </Divider>
 
           <Stack spacing={1}>
             {demoTickets.map((demo) => (
-              <Tooltip key={demo.id} title={demo.hint} placement="right" describeChild>
+              <Tooltip
+                key={demo.id}
+                title={t(`demos.${demo.id}.hint`)}
+                placement="right"
+                describeChild
+              >
                 <Button
                   type="button"
                   variant="outlined"
@@ -190,7 +214,7 @@ export function TicketForm({ onSubmit, isSubmitting, serverErrors }: TicketFormP
                   }}
                   sx={{ justifyContent: 'flex-start' }}
                 >
-                  {demo.label}
+                  {t(`demos.${demo.id}.label`)}
                 </Button>
               </Tooltip>
             ))}

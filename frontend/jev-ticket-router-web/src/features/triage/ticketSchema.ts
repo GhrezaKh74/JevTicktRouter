@@ -1,26 +1,46 @@
 import { z } from 'zod';
+import type { TFunction } from 'i18next';
 import { REQUESTER_ROLES } from '../../api/types';
 
+/** Length limits, mirroring the FluentValidation rules on the server. */
+export const TICKET_LIMITS = {
+  titleMin: 3,
+  titleMax: 200,
+  descriptionMin: 10,
+  descriptionMax: 5000,
+} as const;
+
 /**
- * Client-side validation. Mirrors the FluentValidation rules on the server so the user gets instant
- * feedback; the server remains the authority and its errors are surfaced if the two ever diverge.
+ * Builds the client-side validation schema in the reader's language.
+ *
+ * A factory rather than a module constant because the messages are translated: a schema built once
+ * at import time would keep whichever language happened to be active then, and stop matching the UI
+ * after a language switch.
  */
-export const ticketSchema = z.object({
-  title: z
-    .string()
-    .trim()
-    .min(3, 'Title must be at least 3 characters.')
-    .max(200, 'Title must be at most 200 characters.'),
-  description: z
-    .string()
-    .trim()
-    .min(10, 'Description must be at least 10 characters.')
-    .max(5000, 'Description must be at most 5000 characters.'),
-  requesterRole: z.enum(REQUESTER_ROLES),
-});
+export function createTicketSchema(t: TFunction) {
+  return z.object({
+    title: z
+      .string()
+      .trim()
+      .min(TICKET_LIMITS.titleMin, t('validation.titleMin', { count: TICKET_LIMITS.titleMin }))
+      .max(TICKET_LIMITS.titleMax, t('validation.titleMax', { count: TICKET_LIMITS.titleMax })),
+    description: z
+      .string()
+      .trim()
+      .min(
+        TICKET_LIMITS.descriptionMin,
+        t('validation.descriptionMin', { count: TICKET_LIMITS.descriptionMin }),
+      )
+      .max(
+        TICKET_LIMITS.descriptionMax,
+        t('validation.descriptionMax', { count: TICKET_LIMITS.descriptionMax }),
+      ),
+    requesterRole: z.enum(REQUESTER_ROLES, { message: t('validation.roleInvalid') }),
+  });
+}
 
 /** The shape of the ticket form. */
-export type TicketFormValues = z.infer<typeof ticketSchema>;
+export type TicketFormValues = z.infer<ReturnType<typeof createTicketSchema>>;
 
 /** An empty form. */
 export const emptyTicket: TicketFormValues = {

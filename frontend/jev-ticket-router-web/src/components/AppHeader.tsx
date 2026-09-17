@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
@@ -9,6 +10,7 @@ import Skeleton from '@mui/material/Skeleton';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import HubIcon from '@mui/icons-material/Hub';
 import type { HealthResponse } from '../api/types';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 /** Replace with the real repository URL when publishing. */
 const GITHUB_URL = 'https://github.com/GhrezaKh74/JevTicktRouter';
@@ -19,20 +21,24 @@ interface AppHeaderProps {
 }
 
 /**
- * Top bar: the project name, a badge saying whether Jev is live or mocked, and a link to the repo.
+ * Top bar: the project name, a badge saying whether Jev is live or mocked, a language switcher, and
+ * a link to the repo.
  */
 export function AppHeader({ health, isLoading }: AppHeaderProps) {
+  const { t } = useTranslation();
+
   return (
     <AppBar position="sticky" color="default" elevation={0}>
       <Toolbar sx={{ gap: 1.5, minHeight: { xs: 60, sm: 64 } }}>
         <HubIcon color="primary" aria-hidden />
 
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h1" component="h1" noWrap>
-            JevTicketRouter
+          {/* The product name is a proper noun: it stays in Latin script in every locale. */}
+          <Typography variant="h1" component="h1" noWrap lang="en" dir="ltr">
+            {t('app.name')}
           </Typography>
           <Typography variant="caption" color="text.secondary" noWrap component="p">
-            Structured ticket triage with TypeSafe Jev
+            {t('app.tagline')}
           </Typography>
         </Box>
 
@@ -44,13 +50,15 @@ export function AppHeader({ health, isLoading }: AppHeaderProps) {
           <ModeBadge mode={health?.jevMode} model={health?.model} />
         )}
 
-        <Tooltip title="View the source on GitHub" describeChild>
+        <LanguageSwitcher />
+
+        <Tooltip title={t('header.github')} describeChild>
           <IconButton
             component="a"
             href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="View the source on GitHub"
+            aria-label={t('header.github')}
             size="small"
           >
             <GitHubIcon />
@@ -68,10 +76,12 @@ function ModeBadge({
   readonly mode: 'Live' | 'Mock' | undefined;
   readonly model: string | undefined;
 }) {
+  const { t } = useTranslation();
+
   if (mode === undefined) {
     return (
-      <Tooltip title="The API could not be reached, so its mode is unknown." describeChild>
-        <Chip label="API offline" color="error" variant="outlined" size="small" />
+      <Tooltip title={t('header.modeUnknownHint')} describeChild>
+        <Chip label={t('header.modeUnknown')} color="error" variant="outlined" size="small" />
       </Tooltip>
     );
   }
@@ -82,13 +92,13 @@ function ModeBadge({
     <Tooltip
       title={
         isLive
-          ? `Calling the TypeSafe API with model ${model ?? 'jev-latest'}.`
-          : 'No TYPESAFE_API_KEY is configured, so triage returns deterministic sample answers.'
+          ? t('header.modeLiveHint', { model: model ?? 'jev-latest' })
+          : t('header.modeMockHint')
       }
       describeChild
     >
       <Chip
-        label={isLive ? 'Live Jev' : 'Mock mode'}
+        label={isLive ? t('header.modeLive') : t('header.modeMock')}
         color={isLive ? 'success' : 'warning'}
         variant={isLive ? 'filled' : 'outlined'}
         size="small"

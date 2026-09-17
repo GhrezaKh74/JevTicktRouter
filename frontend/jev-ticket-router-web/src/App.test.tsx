@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import App from './App';
 import { renderWithProviders } from './test/renderWithProviders';
 import { cleanResult, escalatedResult } from './test/fixtures';
-import { demoTickets } from './features/triage/demoTickets';
+import { demoLabel } from './test/i18nHelpers';
+import { en } from './i18n';
 import type { HealthResponse } from './api/types';
 
 const health: HealthResponse = {
@@ -72,22 +73,22 @@ describe('App', () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
-    await user.click(screen.getByRole('button', { name: demoTickets[1]!.label }));
+    await user.click(screen.getByRole('button', { name: demoLabel('english-access') }));
     await user.click(screen.getByRole('button', { name: /triage ticket/i }));
 
     expect(await screen.findByText('Routing decision')).toBeInTheDocument();
-    expect(screen.getByText('IdentityAccess')).toBeInTheDocument();
-    expect(screen.getByText('Ready to auto-route')).toBeInTheDocument();
+    expect(screen.getByText(en.teams.IdentityAccess)).toBeInTheDocument();
+    expect(screen.getByText(en.result.autoRouted)).toBeInTheDocument();
   });
 
   it('confirms the outcome in a snackbar', async () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
-    await user.click(screen.getByRole('button', { name: demoTickets[1]!.label }));
+    await user.click(screen.getByRole('button', { name: demoLabel('english-access') }));
     await user.click(screen.getByRole('button', { name: /triage ticket/i }));
 
-    expect(await screen.findByText('Triaged. Routed to IdentityAccess.')).toBeInTheDocument();
+    expect(await screen.findByText('Triaged. Routed to Identity & Access.')).toBeInTheDocument();
   });
 
   it('reports an escalated ticket as needing review', async () => {
@@ -99,13 +100,11 @@ describe('App', () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
-    await user.click(screen.getByRole('button', { name: demoTickets[2]!.label }));
+    await user.click(screen.getByRole('button', { name: demoLabel('security-review') }));
     await user.click(screen.getByRole('button', { name: /triage ticket/i }));
 
-    expect(await screen.findByText('Held for human review')).toBeInTheDocument();
-    expect(
-      await screen.findByText('Triaged. This ticket needs a human review.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(en.result.escalated)).toBeInTheDocument();
+    expect(await screen.findByText(en.toast.needsReview)).toBeInTheDocument();
   });
 
   it('shows a readable error when the API fails', async () => {
@@ -122,7 +121,7 @@ describe('App', () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
-    await user.click(screen.getByRole('button', { name: demoTickets[0]!.label }));
+    await user.click(screen.getByRole('button', { name: demoLabel('persian-technical') }));
     await user.click(screen.getByRole('button', { name: /triage ticket/i }));
 
     expect(await screen.findByText('Could not triage this ticket')).toBeInTheDocument();
@@ -146,7 +145,7 @@ describe('App', () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
-    await user.click(screen.getByRole('button', { name: demoTickets[0]!.label }));
+    await user.click(screen.getByRole('button', { name: demoLabel('persian-technical') }));
     await user.click(screen.getByRole('button', { name: /triage ticket/i }));
 
     expect(await screen.findByText('The server rejected this title.')).toBeInTheDocument();
@@ -169,7 +168,7 @@ describe('App', () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);
 
-    await user.click(screen.getByRole('button', { name: demoTickets[0]!.label }));
+    await user.click(screen.getByRole('button', { name: demoLabel('persian-technical') }));
     await user.click(screen.getByRole('button', { name: /triage ticket/i }));
 
     expect(await screen.findByText(/Could not reach the triage API/i)).toBeInTheDocument();

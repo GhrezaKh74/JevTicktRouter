@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
@@ -54,20 +55,31 @@ function Decision({
   readonly result: TriageTicketResponse;
   readonly confidenceThreshold: number;
 }) {
+  const { t } = useTranslation();
+
   const needsReview = result.needsHumanReview.value;
   const sensitive = result.containsSensitiveData.value;
+
+  const team = t(`teams.${result.targetTeam.value}`);
+  const priority = t(`priorities.${result.priority.value}`);
+
+  // The routing sentence is composed here rather than taken from the server's `routingSummary`,
+  // which is English prose. The server's version stays in the raw response below.
+  const summary = needsReview
+    ? t('result.summaryEscalated', { team, priority })
+    : t('result.summaryAuto', { team, priority });
 
   return (
     <Card component="section" aria-labelledby="result-heading" aria-live="polite">
       <CardHeader
         id="result-heading"
-        title="Routing decision"
-        subheader={`Ticket ${result.ticketId}`}
+        title={t('result.heading')}
+        subheader={t('result.ticketId', { id: result.ticketId })}
         slotProps={{ title: { variant: 'h2' }, subheader: { variant: 'caption' } }}
         action={
           <Chip
             size="small"
-            label={result.jev.mode === 'Live' ? 'Live Jev' : 'Mock mode'}
+            label={result.jev.mode === 'Live' ? t('header.modeLive') : t('header.modeMock')}
             color={result.jev.mode === 'Live' ? 'success' : 'warning'}
             variant="outlined"
           />
@@ -77,47 +89,55 @@ function Decision({
       <CardContent>
         <Stack spacing={2.5}>
           <Alert severity={needsReview ? 'warning' : 'success'} variant="outlined">
-            <AlertTitle>{needsReview ? 'Held for human review' : 'Ready to auto-route'}</AlertTitle>
-            {result.routingSummary}
+            <AlertTitle>{needsReview ? t('result.escalated') : t('result.autoRouted')}</AlertTitle>
+            {summary}
           </Alert>
 
           <Stack spacing={1.5}>
             <DecisionRow
-              label="Category"
-              value={result.category.value}
-              modelValue={result.category.modelValue}
+              label={t('result.category')}
+              value={t(`categories.${result.category.value}`)}
+              modelValue={t(`categories.${result.category.modelValue}`)}
               origin={result.category.origin}
               wasOverridden={result.category.wasOverridden}
               color={result.category.value === 'SecurityConcern' ? 'error' : 'primary'}
             />
             <DecisionRow
-              label="Target team"
-              value={result.targetTeam.value}
-              modelValue={result.targetTeam.modelValue}
+              label={t('result.targetTeam')}
+              value={team}
+              modelValue={t(`teams.${result.targetTeam.modelValue}`)}
               origin={result.targetTeam.origin}
               wasOverridden={result.targetTeam.wasOverridden}
               color="primary"
             />
             <DecisionRow
-              label="Priority"
-              value={result.priority.value}
-              modelValue={result.priority.modelValue}
+              label={t('result.priority')}
+              value={priority}
+              modelValue={t(`priorities.${result.priority.modelValue}`)}
               origin={result.priority.origin}
               wasOverridden={result.priority.wasOverridden}
               color={PRIORITY_COLORS[result.priority.value]}
             />
             <DecisionRow
-              label="Sensitive data"
-              value={sensitive ? 'Detected' : 'None detected'}
-              modelValue={result.containsSensitiveData.modelValue ? 'Detected' : 'None detected'}
+              label={t('result.sensitiveData')}
+              value={sensitive ? t('result.sensitiveDetected') : t('result.sensitiveNone')}
+              modelValue={
+                result.containsSensitiveData.modelValue
+                  ? t('result.sensitiveDetected')
+                  : t('result.sensitiveNone')
+              }
               origin={result.containsSensitiveData.origin}
               wasOverridden={result.containsSensitiveData.wasOverridden}
               color={sensitive ? 'error' : 'default'}
             />
             <DecisionRow
-              label="Human review"
-              value={needsReview ? 'Required' : 'Not required'}
-              modelValue={result.needsHumanReview.modelValue ? 'Required' : 'Not required'}
+              label={t('result.humanReview')}
+              value={needsReview ? t('result.reviewRequired') : t('result.reviewNotRequired')}
+              modelValue={
+                result.needsHumanReview.modelValue
+                  ? t('result.reviewRequired')
+                  : t('result.reviewNotRequired')
+              }
               origin={result.needsHumanReview.origin}
               wasOverridden={result.needsHumanReview.wasOverridden}
               color={needsReview ? 'warning' : 'default'}
@@ -128,21 +148,21 @@ function Decision({
 
           <Box>
             <Typography variant="subtitle2" gutterBottom>
-              Jev confidence
+              {t('result.confidenceHeading')}
             </Typography>
             <Stack spacing={1.5}>
               <ConfidenceMeter
-                label="Category"
+                label={t('result.category')}
                 confidence={result.category.confidence}
                 threshold={confidenceThreshold}
               />
               <ConfidenceMeter
-                label="Target team"
+                label={t('result.targetTeam')}
                 confidence={result.targetTeam.confidence}
                 threshold={confidenceThreshold}
               />
               <ConfidenceMeter
-                label="Priority"
+                label={t('result.priority')}
                 confidence={result.priority.confidence}
                 threshold={confidenceThreshold}
               />
@@ -151,8 +171,7 @@ function Decision({
 
           {sensitive && (
             <Alert severity="error" variant="outlined">
-              Sensitive data was detected. The ticket text has been redacted from the structured
-              logs and from the developer details below.
+              {t('result.sensitiveWarning')}
             </Alert>
           )}
 
@@ -164,15 +183,17 @@ function Decision({
 }
 
 function LoadingState() {
+  const { t } = useTranslation();
+
   return (
     <Card component="section" aria-busy="true" aria-live="polite">
       <CardHeader
-        title="Analysing ticket…"
-        subheader="Asking Jev five questions in a single batched call"
+        title={t('result.loadingHeading')}
+        subheader={t('result.loadingSubheading')}
         slotProps={{ title: { variant: 'h2' }, subheader: { variant: 'caption' } }}
       />
       <CardContent>
-        <LinearProgress aria-label="Analysing ticket" sx={{ mb: 2.5 }} />
+        <LinearProgress aria-label={t('result.loadingAria')} sx={{ mb: 2.5 }} />
         <Stack spacing={1.5}>
           {Array.from({ length: 5 }, (_, index) => (
             <Skeleton key={index} variant="rounded" height={28} />
@@ -185,12 +206,14 @@ function LoadingState() {
 }
 
 function ErrorState({ message }: { readonly message: string }) {
+  const { t } = useTranslation();
+
   return (
     <Card component="section" aria-live="assertive">
-      <CardHeader title="Triage failed" slotProps={{ title: { variant: 'h2' } }} />
+      <CardHeader title={t('result.errorHeading')} slotProps={{ title: { variant: 'h2' } }} />
       <CardContent>
         <Alert severity="error" variant="outlined">
-          <AlertTitle>Could not triage this ticket</AlertTitle>
+          <AlertTitle>{t('result.errorTitle')}</AlertTitle>
           {message}
         </Alert>
       </CardContent>
@@ -199,6 +222,8 @@ function ErrorState({ message }: { readonly message: string }) {
 }
 
 function EmptyState() {
+  const { t } = useTranslation();
+
   return (
     <Card
       component="section"
@@ -207,10 +232,9 @@ function EmptyState() {
       <CardContent>
         <Stack spacing={1.5} sx={{ alignItems: 'center', textAlign: 'center', maxWidth: 380 }}>
           <InsightsIcon sx={{ fontSize: 44, color: 'text.secondary' }} aria-hidden />
-          <Typography variant="h2">No ticket analysed yet</Typography>
+          <Typography variant="h2">{t('result.emptyHeading')}</Typography>
           <Typography variant="body2" color="text.secondary">
-            Submit a ticket, or pick one of the samples. Jev answers five scoped questions in one
-            call, then deterministic .NET rules decide the final routing.
+            {t('result.emptyBody')}
           </Typography>
         </Stack>
       </CardContent>

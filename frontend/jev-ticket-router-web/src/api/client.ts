@@ -12,17 +12,33 @@ import type {
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? '';
 
 /**
+ * Why a request failed, in a form the UI can branch on.
+ *
+ * `message` is an English fallback suitable for a console or a log. Failures the client itself
+ * diagnoses (`network`, `unexpected-status`) are translated for display; `server` means the message
+ * came from the API's ProblemDetails and is shown exactly as the server wrote it.
+ */
+export type ApiErrorReason = 'network' | 'server' | 'unexpected-status';
+
+/**
  * An API failure carrying the server's ProblemDetails when one was returned, so the UI can show a
  * useful message and per-field validation errors instead of a generic failure.
  */
 export class ApiError extends Error {
   readonly status: number;
+  readonly reason: ApiErrorReason;
   readonly problem: ProblemDetails | null;
 
-  constructor(message: string, status: number, problem: ProblemDetails | null = null) {
+  constructor(
+    message: string,
+    status: number,
+    reason: ApiErrorReason,
+    problem: ProblemDetails | null = null,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.reason = reason;
     this.problem = problem;
   }
 
@@ -44,14 +60,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(
       'Could not reach the triage API. Check that the backend is running and try again.',
       0,
+      'network',
     );
   }
 
   if (!response.ok) {
+    const problem = await readProblem(response);
+    const detail = problem?.detail ?? problem?.title;
+
     throw new ApiError(
-      await describeFailure(response),
+      detail ?? `The triage API returned an unexpected error (${String(response.status)}).`,
       response.status,
-      await readProblem(response),
+      detail ? 'server' : 'unexpected-status',
+      problem,
     );
   }
 
@@ -65,20 +86,6 @@ async function readProblem(response: Response): Promise<ProblemDetails | null> {
   } catch {
     return null;
   }
-}
-
-async function describeFailure(response: Response): Promise<string> {
-  const problem = await readProblem(response);
-
-  if (problem?.detail) {
-    return problem.detail;
-  }
-
-  if (problem?.title) {
-    return problem.title;
-  }
-
-  return `The triage API returned an unexpected error (${String(response.status)}).`;
 }
 
 /** Submits a ticket for triage. */

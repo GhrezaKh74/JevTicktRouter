@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ticketSchema } from './ticketSchema';
+import { createTicketSchema } from './ticketSchema';
+import { i18n } from '../../i18n';
 import { demoTickets } from './demoTickets';
 
 describe('ticketSchema', () => {
+  const ticketSchema = createTicketSchema(i18n.t.bind(i18n));
+
   it('accepts a well-formed ticket', () => {
     const result = ticketSchema.safeParse({
       title: 'A valid title',

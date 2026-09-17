@@ -1,0 +1,70 @@
+import { useTranslation } from 'react-i18next';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import Box from '@mui/material/Box';
+import Skeleton from '@mui/material/Skeleton';
+import GitHubIcon from '@mui/icons-material/GitHub';
+import HubIcon from '@mui/icons-material/Hub';
+import type { HealthResponse } from '../api/types';
+import { LanguageSwitcher } from './LanguageSwitcher';
+import { ProviderBadge } from './ProviderBadge';
+
+/** Replace with the real repository URL when publishing. */
+const GITHUB_URL = 'https://github.com/GhrezaKh74/JevTicktRouter';
+
+interface AppHeaderProps {
+  readonly health: HealthResponse | undefined;
+  readonly isLoading: boolean;
+}
+
+/**
+ * Top bar: the project name, a badge saying whether Jev is live or mocked, a language switcher, and
+ * a link to the repo.
+ */
+export function AppHeader({ health, isLoading }: AppHeaderProps) {
+  const { t } = useTranslation();
+
+  return (
+    <AppBar position="sticky" color="default" elevation={0}>
+      <Toolbar sx={{ gap: 1.5, minHeight: { xs: 60, sm: 64 } }}>
+        <HubIcon color="primary" aria-hidden />
+
+        <Box sx={{ minWidth: 0 }}>
+          {/* The product name is a proper noun: it stays in Latin script in every locale. */}
+          <Typography variant="h1" component="h1" noWrap lang="en" dir="ltr">
+            {t('app.name')}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" noWrap component="p">
+            {t('app.tagline')}
+          </Typography>
+        </Box>
+
+        <Box sx={{ flexGrow: 1 }} />
+
+        {isLoading ? (
+          <Skeleton variant="rounded" width={104} height={28} data-testid="mode-badge-skeleton" />
+        ) : (
+          <ProviderBadge provider={health?.provider} model={health?.model} />
+        )}
+
+        <LanguageSwitcher />
+
+        <Tooltip title={t('header.github')} describeChild>
+          <IconButton
+            component="a"
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t('header.github')}
+            size="small"
+          >
+            <GitHubIcon />
+          </IconButton>
+        </Tooltip>
+      </Toolbar>
+    </AppBar>
+  );
+}

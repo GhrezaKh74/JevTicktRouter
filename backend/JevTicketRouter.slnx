@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="JevTicketRouter.Api/JevTicketRouter.Api.csproj" />
+  <Project Path="JevTicketRouter.Application/JevTicketRouter.Application.csproj" />
+  <Project Path="JevTicketRouter.Domain/JevTicketRouter.Domain.csproj" />
+  <Project Path="JevTicketRouter.Infrastructure/JevTicketRouter.Infrastructure.csproj" />
+  <Project Path="JevTicketRouter.Tests/JevTicketRouter.Tests.csproj" />
+</Solution>

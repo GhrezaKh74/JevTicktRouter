@@ -239,6 +239,20 @@ kind of false provenance this project spends so much effort avoiding.
 | `circuit-1.7b` | Qwen3-1.7B | Lighter, fits a small card |
 | `circuit-8b` | Qwen3-8B | More accurate; ~17 GB, or set `load_4bit: true` in `config.json` for a 12 GB card |
 
+**Testing it without a GPU.** The repository ships a stub that serves the same contract, so the
+whole path can be exercised on any machine:
+
+```bash
+python tools/circuit-stub/circuit_stub.py    # :8901, standard library only
+
+AI_PROVIDER=SelfHosted SELF_HOSTED_BASE_URL=http://localhost:8901 \
+  dotnet run --project backend/JevTicketRouter.Api
+```
+
+It answers confidently on recognisable text and vaguely otherwise, so both branches of the
+confidence rule are reachable. See [`tools/circuit-stub`](tools/circuit-stub). It is a fixture, not
+a model — the answers are keyword matches, not judgements.
+
 **This will not work through Ollama.** The calibrated probabilities come from a pointer readout head
 on top of the LoRA, and a plain GGUF conversion drops that head — the model would still answer, but
 the numbers would no longer mean what they claim. Run circuit's own server.

@@ -1,0 +1,7 @@
+# Installed from PyTorch's own index, so the build can choose a CPU or a CUDA build without
+# touching the rest of the dependency list. See the Dockerfile's TORCH_INDEX_URL.
+#
+# Versions come from circuit's own uv.lock at the commit the image pins, so the container runs
+# the same tensor library the project was developed against.
+torch==2.14.0
+torchvision==0.29.0

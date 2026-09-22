@@ -10,6 +10,16 @@
 #
 #   AI_PROVIDER=Jev TYPESAFE_API_KEY=<your-key> docker compose up --build
 #
+# With circuit, the open-weights System One model, served from this file (no key, nothing leaves
+# the machine; first run downloads ~3.5 GB of weights into a volume):
+#
+#   AI_PROVIDER=SelfHosted docker compose --profile circuit up --build
+#
+# Same thing without the download or a GPU, for showing the wiring in seconds. The stub answers
+# from keyword rules, not a model — a test fixture, never anything real:
+#
+#   AI_PROVIDER=SelfHosted docker compose --profile circuit-stub up --build
+#
 # With a local model, started by this file (pulls it automatically, first run downloads several GB):
 #
 #   AI_PROVIDER=Local LOCAL_AI_MODEL=qwen2.5:7b-instruct \
@@ -37,12 +47,25 @@ services:
     ports:
       - "${APP_PORT:-8080}:8080"
     environment:
-      # Which engine decides: Jev | Local | Mock.
+      # Which engine decides: Jev | SelfHosted | Local | Mock.
       # Mock by default so a bare `docker compose up` works with nothing configured.
       AI_PROVIDER: "${AI_PROVIDER:-Mock}"
 
       # Cloud provider. Empty means Mock mode, whatever AI_PROVIDER says.
       TYPESAFE_API_KEY: "${TYPESAFE_API_KEY:-}"
+
+      # Self-hosted provider. Both the `circuit` and `circuit-stub` profiles answer on this name:
+      # the stub joins the network under the alias `circuit`, because from the application's side
+      # the only difference is which process is listening. Point this at a server of your own —
+      # including one on your machine, at http://host.docker.internal:8901 — to use that instead.
+      SELF_HOSTED_BASE_URL: "${SELF_HOSTED_BASE_URL:-http://circuit:8901}"
+      SELF_HOSTED_MODEL: "${CIRCUIT_MODEL:-circuit-1.7b}"
+      # circuit wants the bearer header present but ignores the value unless it was started with
+      # S1_API_KEY. The placeholder keeps the header well-formed; set both to a real secret to
+      # require one.
+      SELF_HOSTED_API_KEY: "${SELF_HOSTED_API_KEY:-x}"
+      # Loading the base model is slow, and the first ticket after start waits for it.
+      SelfHosted__TimeoutSeconds: "${SELF_HOSTED_TIMEOUT:-300}"
 
       # Local provider. Two situations, and the right URL differs:
       #
@@ -74,6 +97,72 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
+
+  # ----------------------------------------------------------------------------------------------
+  # `--profile circuit`: the real self-hosted System One server.
+  #
+  # Open weights, no API key, no outbound call once the weights are cached. CPU by default, so it
+  # starts on any machine; see tools/circuit/README.md for the CUDA build and the GPU lines below.
+  # ----------------------------------------------------------------------------------------------
+  circuit:
+    build:
+      context: ./tools/circuit
+      dockerfile: Dockerfile
+      args:
+        # CPU wheels by default. For an NVIDIA card use the ordinary index, whose torch wheels
+        # bundle CUDA: TORCH_INDEX_URL=https://pypi.org/simple
+        TORCH_INDEX_URL: "${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}"
+    image: jevticketrouter-circuit:latest
+    container_name: jevticketrouter-circuit
+    profiles: ["circuit"]
+    ports:
+      # Published so the server can be probed directly; the application reaches it over the
+      # compose network and does not need this.
+      - "${CIRCUIT_PORT:-8901}:8901"
+    environment:
+      # circuit-1.7b or circuit-8b. The small one scores 0.897 on circuit's own validation split
+      # against the large one's 0.899, and needs 3.5 GB instead of 16.6 GB, so it is the default.
+      CIRCUIT_MODEL: "${CIRCUIT_MODEL:-circuit-1.7b}"
+      # Empty means any non-empty bearer token is accepted, which is what a private network needs.
+      # To require a real one, set CIRCUIT_API_KEY and SELF_HOSTED_API_KEY to the same value.
+      S1_API_KEY: "${CIRCUIT_API_KEY:-}"
+    volumes:
+      # The run and the base model both live here, so they are downloaded once rather than on
+      # every `docker compose up`.
+      - circuit-weights:/weights
+    restart: unless-stopped
+    # Uncomment to hand an NVIDIA card to the container. Needs the NVIDIA Container Toolkit on the
+    # host, and an image built with the CUDA wheels (TORCH_INDEX_URL above).
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: ["gpu"]
+
+  # ----------------------------------------------------------------------------------------------
+  # `--profile circuit-stub`: the same contract, answered by keyword rules.
+  #
+  # A TEST FIXTURE, not a model. It makes the SelfHosted path demonstrable in seconds on a machine
+  # that cannot run the weights. Never point anything real at it. Enable this profile or `circuit`,
+  # not both: they share the network name `circuit`.
+  # ----------------------------------------------------------------------------------------------
+  circuit-stub:
+    build:
+      context: ./tools/circuit-stub
+      dockerfile: Dockerfile
+    image: jevticketrouter-circuit-stub:latest
+    container_name: jevticketrouter-circuit-stub
+    profiles: ["circuit-stub"]
+    ports:
+      - "${CIRCUIT_PORT:-8901}:8901"
+    networks:
+      default:
+        # So SELF_HOSTED_BASE_URL needs no change between the two profiles. `docker compose ps`
+        # and the container's own startup banner say which one is actually serving.
+        aliases: ["circuit"]
+    restart: unless-stopped
 
   # Everything below only starts with `--profile local`. A plain `docker compose up` ignores it,
   # so the default path stays small and quick.
@@ -112,3 +201,6 @@ services:
 
 volumes:
   ollama-models:
+  # ~3.5 GB for circuit-1.7b, ~16.6 GB for circuit-8b. `docker compose down` keeps it;
+  # `docker compose down -v` throws it away and the next start downloads again.
+  circuit-weights:

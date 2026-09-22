@@ -111,4 +111,54 @@ public sealed class LocalEndpointGuardTests
 
         verdict.IsAllowed.Should().BeFalse();
     }
+
+    [Fact]
+    public void Inspect_NamesTheLocalSettingsByDefault()
+    {
+        var verdict = LocalEndpointGuard.Inspect("https://example.com/v1", allowPublicEndpoint: false);
+
+        verdict.Reason.Should().Contain("LOCAL_AI_BASE_URL");
+        verdict.Reason.Should().Contain("LocalAi:AllowPublicEndpoint");
+    }
+
+    [Fact]
+    public void Inspect_NamesTheSelfHostedSettingsForASelfHostedEndpoint()
+    {
+        // The rule is shared, but the settings are not: telling a self-hosted operator to change
+        // LocalAi:AllowPublicEndpoint would send them to a key their provider never reads.
+        var verdict = LocalEndpointGuard.Inspect(
+            "https://example.com/v1",
+            allowPublicEndpoint: false,
+            EndpointPolicy.SelfHosted);
+
+        verdict.IsAllowed.Should().BeFalse();
+        verdict.Reason.Should().Contain("SELF_HOSTED_BASE_URL");
+        verdict.Reason.Should().Contain("SelfHosted:AllowPublicEndpoint");
+        verdict.Reason.Should().NotContain("LocalAi");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Inspect_NamesTheSelfHostedUrlSettingWhenItIsMissing(string? url)
+    {
+        var verdict = LocalEndpointGuard.Inspect(url, allowPublicEndpoint: true, EndpointPolicy.SelfHosted);
+
+        verdict.IsAllowed.Should().BeFalse();
+        verdict.Reason.Should().Be("SELF_HOSTED_BASE_URL is not configured.");
+    }
+
+    [Fact]
+    public void Inspect_AcceptsAContainerNetworkName()
+    {
+        // How the compose file reaches the model server: a single-label name on the bridge network,
+        // which cannot resolve anywhere but inside it.
+        var verdict = LocalEndpointGuard.Inspect(
+            "http://circuit:8901",
+            allowPublicEndpoint: false,
+            EndpointPolicy.SelfHosted);
+
+        verdict.IsAllowed.Should().BeTrue();
+        verdict.Reason.Should().Contain("single-label");
+    }
 }

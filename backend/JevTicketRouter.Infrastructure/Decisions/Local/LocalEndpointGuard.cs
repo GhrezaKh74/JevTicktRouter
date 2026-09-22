@@ -9,13 +9,40 @@ namespace JevTicketRouter.Infrastructure.Decisions.Local;
 public readonly record struct EndpointVerdict(bool IsAllowed, string Reason);
 
 /// <summary>
-/// Decides whether a configured <c>LOCAL_AI_BASE_URL</c> is somewhere local mode is allowed to talk to.
+/// The names a refusal should quote back at the operator.
 /// <para>
-/// Local mode exists so restricted data never leaves the organisation's network. A base URL pointing
-/// at the public internet would defeat that silently, and a typo in a hostname is an easy way to do
-/// it by accident — so anything that is not demonstrably loopback, private, or link-local is refused
-/// by default. An administrator can override it deliberately, for the real case of a model gateway
-/// on a routable corporate address, but never by accident.
+/// The rule is identical for local and self-hosted mode, but the settings are not, and an operator
+/// told to change <c>LocalAi:AllowPublicEndpoint</c> when the provider reading it is
+/// <c>SelfHosted</c> would be sent to a setting that has no effect.
+/// </para>
+/// </summary>
+/// <param name="ModeName">How the mode is described in prose, e.g. "Local mode".</param>
+/// <param name="UrlSetting">The environment variable holding the address.</param>
+/// <param name="OverrideSetting">The configuration key for the administrator override.</param>
+public readonly record struct EndpointPolicy(string ModeName, string UrlSetting, string OverrideSetting)
+{
+    /// <summary>An OpenAI-compatible endpoint inside the network: <c>AI_PROVIDER=Local</c>.</summary>
+    public static EndpointPolicy Local { get; } =
+        new("Local mode", "LOCAL_AI_BASE_URL", "LocalAi:AllowPublicEndpoint");
+
+    /// <summary>A System One server you run yourself: <c>AI_PROVIDER=SelfHosted</c>.</summary>
+    public static EndpointPolicy SelfHosted { get; } =
+        new("Self-hosted mode", "SELF_HOSTED_BASE_URL", "SelfHosted:AllowPublicEndpoint");
+}
+
+/// <summary>
+/// Decides whether a configured model endpoint is somewhere the application is allowed to talk to.
+/// <para>
+/// Running the model yourself exists so restricted data never leaves the organisation's network. A
+/// base URL pointing at the public internet would defeat that silently, and a typo in a hostname is
+/// an easy way to do it by accident — so anything that is not demonstrably loopback, private, or
+/// link-local is refused by default. An administrator can override it deliberately, for the real
+/// case of a model gateway on a routable corporate address, but never by accident.
+/// </para>
+/// <para>
+/// Both providers that call out to hardware you control are checked here — <c>Local</c> for an
+/// OpenAI-compatible endpoint and <c>SelfHosted</c> for a System One server — because the rule is
+/// the same either way. Only the setting names in a refusal differ; see <see cref="EndpointPolicy"/>.
 /// </para>
 /// </summary>
 public static class LocalEndpointGuard
@@ -40,28 +67,37 @@ public static class LocalEndpointGuard
     /// <param name="allowPublicEndpoint">
     /// The administrator override. When true, any well-formed absolute HTTP(S) URL is accepted.
     /// </param>
-    public static EndpointVerdict Inspect(string? baseUrl, bool allowPublicEndpoint)
+    /// <param name="policy">
+    /// Which settings a refusal should name. Defaults to local mode's, so the message points at the
+    /// variable the operator actually has to change.
+    /// </param>
+    public static EndpointVerdict Inspect(
+        string? baseUrl,
+        bool allowPublicEndpoint,
+        EndpointPolicy? policy = null)
     {
+        var names = policy ?? EndpointPolicy.Local;
+
         if (string.IsNullOrWhiteSpace(baseUrl))
         {
-            return new EndpointVerdict(false, "LOCAL_AI_BASE_URL is not configured.");
+            return new EndpointVerdict(false, $"{names.UrlSetting} is not configured.");
         }
 
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
         {
-            return new EndpointVerdict(false, "LOCAL_AI_BASE_URL is not a valid absolute URL.");
+            return new EndpointVerdict(false, $"{names.UrlSetting} is not a valid absolute URL.");
         }
 
         if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
         {
-            return new EndpointVerdict(false, $"LOCAL_AI_BASE_URL must use http or https, not '{uri.Scheme}'.");
+            return new EndpointVerdict(false, $"{names.UrlSetting} must use http or https, not '{uri.Scheme}'.");
         }
 
         if (allowPublicEndpoint)
         {
             return new EndpointVerdict(
                 true,
-                "Accepted because the administrator override LocalAi:AllowPublicEndpoint is enabled.");
+                $"Accepted because the administrator override {names.OverrideSetting} is enabled.");
         }
 
         if (IsPrivateHost(uri, out var reason))
@@ -71,9 +107,10 @@ public static class LocalEndpointGuard
 
         return new EndpointVerdict(
             false,
-            $"LOCAL_AI_BASE_URL host '{uri.Host}' is not a loopback or private address. Local mode "
-                + "refuses non-local endpoints so restricted data cannot leave the network. Set "
-                + "LocalAi:AllowPublicEndpoint to true only if this address really is an internal gateway.");
+            $"{names.UrlSetting} host '{uri.Host}' is not a loopback or private address. "
+                + $"{names.ModeName} refuses non-local endpoints so restricted data cannot leave the "
+                + $"network. Set {names.OverrideSetting} to true only if this address really is an "
+                + "internal gateway.");
     }
 
     private static bool IsPrivateHost(Uri uri, out string reason)

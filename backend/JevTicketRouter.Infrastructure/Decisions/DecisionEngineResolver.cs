@@ -116,7 +116,10 @@ public static class DecisionEngineResolver
                     + "is not set. Falling back to Mock mode.");
         }
 
-        var verdict = LocalEndpointGuard.Inspect(options.BaseUrl, options.AllowPublicEndpoint);
+        var verdict = LocalEndpointGuard.Inspect(
+            options.BaseUrl,
+            options.AllowPublicEndpoint,
+            EndpointPolicy.SelfHosted);
 
         if (!verdict.IsAllowed)
         {

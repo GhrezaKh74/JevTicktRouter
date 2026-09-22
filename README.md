@@ -219,11 +219,25 @@ That last part is why this took almost no code. The request shape, the three pri
 answer shape — including the detail that `noul` answers carry no confidence — are identical, so this
 provider reuses the existing client, question set, and answer mapper. Only the address changes.
 
+Docker builds and runs the whole thing, model included. This is the entire setup — no key, no
+account, and no outbound call once the weights are cached:
+
+```bash
+AI_PROVIDER=SelfHosted docker compose --profile circuit up --build
+```
+
+The first start downloads ~3.5 GB into a named volume and then loads it, which takes a few minutes
+and looks idle; `docker compose --profile circuit logs -f circuit` shows the progress. Every start
+after that reuses the volume. See [`tools/circuit`](tools/circuit) for the GPU build, the model
+choice, and what is inside the image.
+
+Outside Docker, with circuit checked out yourself:
+
 ```bash
 # 1. Serve the model (see the circuit README for getting the weights into runs/)
 git clone https://github.com/Barneyjm/circuit && cd circuit
 uv sync
-S1_MODEL=lora:runs/circuit-8b uv run python -m s1proto     # POST /v1/systemone on :8901
+S1_MODEL=lora:runs/circuit-1.7b uv run python -m s1proto    # POST /v1/systemone on :8901
 
 # 2. Point the app at it
 AI_PROVIDER=SelfHosted SELF_HOSTED_BASE_URL=http://localhost:8901 \
@@ -234,13 +248,25 @@ The header badge reads **Self-hosted**, and `GET /api/health` reports `"provider
 deliberately not "Jev", because saying Jev for a model you are running yourself would be exactly the
 kind of false provenance this project spends so much effort avoiding.
 
-| Model | Base | Notes |
-| --- | --- | --- |
-| `circuit-1.7b` | Qwen3-1.7B | Lighter, fits a small card |
-| `circuit-8b` | Qwen3-8B | More accurate; ~17 GB, or set `load_4bit: true` in `config.json` for a 12 GB card |
+| Model | Base | Download | Accuracy / ECE on circuit's validation split |
+| --- | --- | --- | --- |
+| `circuit-1.7b` (default) | Qwen3-1.7B-Base | ~3.5 GB | 0.897 / 0.016 |
+| `circuit-8b` | Qwen3-8B-Base | ~16.6 GB | 0.899 / 0.020 |
 
-**Testing it without a GPU.** The repository ships a stub that serves the same contract, so the
-whole path can be exercised on any machine:
+The small one is the default: 0.002 behind on circuit's own numbers, for a fifth of the disk.
+`CIRCUIT_MODEL=circuit-8b` switches both the weights the server loads and the model name recorded on
+each decision, so the two cannot drift apart. Both runs are pinned to the revisions circuit's own
+deployment pins, because an unpinned repository would change the served model the moment new weights
+were pushed.
+
+**Testing it without a GPU, or without the download.** The repository ships a stub that serves the
+same contract, so the whole path can be exercised on any machine:
+
+```bash
+AI_PROVIDER=SelfHosted docker compose --profile circuit-stub up --build
+```
+
+or, without Docker:
 
 ```bash
 python tools/circuit-stub/circuit_stub.py    # :8901, standard library only
@@ -400,20 +426,44 @@ docker run --rm -p 8080:8080 jevticketrouter
 
 ### Choosing a provider
 
+Every mode is one command. Compose profiles keep the extra services out of the default path, so a
+bare `docker compose up` stays small and quick.
+
 ```bash
-# TypeSafe Jev
+# TypeSafe Jev — the hosted API.
 AI_PROVIDER=Jev TYPESAFE_API_KEY=<your-key> docker compose up --build
 
-# A local model. Starts Ollama alongside the app and pulls the model automatically.
+# circuit — open-weights System One on your own hardware. No key, nothing leaves the machine.
+# The first run downloads ~3.5 GB of weights into a named volume; after that it is instant.
+AI_PROVIDER=SelfHosted docker compose --profile circuit up --build
+
+# The same contract from keyword rules, in seconds, with no download and no GPU.
+# A test fixture, not a model — for showing the wiring, never for anything real.
+AI_PROVIDER=SelfHosted docker compose --profile circuit-stub up --build
+
+# A local instruct model. Starts Ollama alongside the app and pulls the model automatically.
 # The first run downloads several GB; after that the named volume keeps it.
 AI_PROVIDER=Local LOCAL_AI_MODEL=qwen2.5:7b-instruct \
   docker compose --profile local up --build
 ```
 
+| Profile | Services | Provider | Weights |
+| --- | --- | --- | --- |
+| *(none)* | `app` | `Mock`, or `Jev` with a key | — |
+| `circuit` | `app`, `circuit` | `SelfHosted` | ~3.5 GB, volume `circuit-weights` |
+| `circuit-stub` | `app`, `circuit-stub` | `SelfHosted` | none; it is a fixture |
+| `local` | `app`, `ollama`, `ollama-pull` | `Local` | several GB, volume `ollama-models` |
+
+Pick one of `circuit` and `circuit-stub`, not both: the stub joins the network under the alias
+`circuit` so that `SELF_HOSTED_BASE_URL` needs no change between them, which also means they collide
+if both run. `docker compose ps` says which one is serving.
+
 Keys can also go in a `.env` file next to `docker-compose.yml` — Compose reads it automatically, and
 `.env` is already git-ignored. Copy `.env.example` to start.
 
-### What the image does
+### What the images do
+
+The application image, built from the `Dockerfile` at the root:
 
 | Stage | Base | Produces |
 | --- | --- | --- |
@@ -427,6 +477,22 @@ Manifests are copied before source in both build stages, so editing code does no
 reports the active provider, making it a real readiness signal rather than just "the process is up".
 
 The test project is not copied into the build, so tests are not part of producing a runtime image.
+
+And the model server, from [`tools/circuit/Dockerfile`](tools/circuit/Dockerfile):
+
+| Stage | Base | Produces |
+| --- | --- | --- |
+| 1 | `python:3.12-slim` | circuit's `s1proto` package at a pinned commit, fetched so `git` stays out of the final image |
+| 2 | `python:3.12-slim` | The server: the serving subset of circuit's dependencies, pinned to its own `uv.lock` |
+
+It installs PyTorch's CPU wheels by default, so it starts on any machine, and reads the weights from
+a volume rather than a layer — 3.5 GB of model in an image layer would make the image impractical to
+move, and would weld one set of weights to one build. `docker compose down` keeps the volume;
+`docker compose down -v` discards it. The health check waits for `/healthz`, which answers only once
+the model is loaded, so the container reports `starting` rather than `unhealthy` while it warms up.
+For a CUDA card, build with `TORCH_INDEX_URL=https://pypi.org/simple` and uncomment the device
+reservation on the `circuit` service; [`tools/circuit/README.md`](tools/circuit/README.md) has the
+details.
 
 ### Troubleshooting Local mode
 
@@ -792,7 +858,13 @@ that requires a paid subscription for commercial use.
 │   └── Directory.Build.props            Shared compiler settings, warnings as errors
 ├── frontend/
 │   └── jev-ticket-router-web/           React 19 + TypeScript + Vite + MUI
+├── tools/
+│   ├── circuit/                         Docker packaging for circuit's own server + weight fetch
+│   └── circuit-stub/                    Same contract from keyword rules, for testing without a GPU
 ├── docs/screenshots/                    Architecture diagram + captures of the running app
+├── Dockerfile                           The application image: React build + API, one origin
+├── docker-compose.yml                   Profiles: default, circuit, circuit-stub, local
+├── .dockerignore
 ├── .editorconfig
 ├── .env.example
 ├── .gitignore

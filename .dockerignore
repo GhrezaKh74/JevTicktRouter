@@ -48,6 +48,10 @@ docs/
 README.md
 *.md
 
+# --- The model servers build from their own contexts (tools/circuit, ---------
+# --- tools/circuit-stub), so none of it belongs in the application image. -----
+tools/
+
 # --- Docker's own files -------------------------------------------------------
 Dockerfile
 .dockerignore

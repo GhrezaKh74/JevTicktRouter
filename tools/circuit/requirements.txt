@@ -1,0 +1,24 @@
+# The subset of circuit's dependencies needed to *serve* a text model, pinned to the versions in
+# its own uv.lock at the commit the image checks out.
+#
+# The training half of the project (datasets, wandb, google-genai) is deliberately absent: this
+# image answers questions, it does not train. So are librosa and soundfile, which only the audio
+# models need -- `s1proto.media` imports them lazily, and this image serves text.
+#
+# torch and torchvision are in requirements-torch.txt, installed from PyTorch's index instead.
+transformers==5.17.0
+peft==0.21.0
+accelerate==1.15.0
+safetensors==0.8.0
+huggingface-hub==1.32.0
+numpy==2.5.3
+pillow==12.3.0
+
+# decision-circuits provides the gate evaluation that `s1proto.circuits` re-exports, so the
+# service module will not even import without it.
+decision-circuits==0.4.0
+
+# The HTTP layer.
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+pydantic==2.13.5

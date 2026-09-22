@@ -9,7 +9,19 @@ A stand-in for [circuit](https://github.com/Barneyjm/circuit)'s `s1proto` server
 
 Only the Python standard library is used, so there is nothing to install.
 
-## Run it
+## Run it, with Docker
+
+From the repository root, and this is everything:
+
+```bash
+AI_PROVIDER=SelfHosted docker compose --profile circuit-stub up --build
+```
+
+The app comes up on <http://localhost:8080> in a few seconds. The stub joins the network under the
+alias `circuit`, so nothing else needs configuring: swapping in the real server later is a change of
+profile, not of settings.
+
+## Run it, with Python
 
 ```bash
 python tools/circuit-stub/circuit_stub.py          # http://localhost:8901
@@ -66,9 +78,16 @@ Confidence uses circuit's own measure, `1 - H(p)/log(N)`.
 ## Running the real thing instead
 
 ```bash
-git clone https://github.com/Barneyjm/circuit && cd circuit
-uv sync
-S1_MODEL=lora:runs/circuit-8b uv run python -m s1proto     # same path, same port
+AI_PROVIDER=SelfHosted docker compose --profile circuit up --build
 ```
 
-Nothing in the application changes — only which process is listening on 8901.
+That builds and runs circuit itself, weights and all — see `tools/circuit/README.md`. Or, outside
+Docker:
+
+```bash
+git clone https://github.com/Barneyjm/circuit && cd circuit
+uv sync
+S1_MODEL=lora:runs/circuit-1.7b uv run python -m s1proto    # same path, same port
+```
+
+Nothing in the application changes either way — only which process is listening on 8901.

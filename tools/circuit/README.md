@@ -104,6 +104,52 @@ single-label or internal host names are accepted, and a public address is refuse
 `SelfHosted__AllowPublicEndpoint` is switched on. A self-hosted model exists so restricted ticket
 data stays inside the network, and a typo in a hostname should not quietly undo that.
 
+## When the container cannot reach the Hub
+
+The one boot that downloads the weights is the only time this image needs the internet. Three things
+go wrong there, and they look alike in the logs, so the script names which one it hit.
+
+**`Temporary failure in name resolution`.** The container cannot resolve `huggingface.co` even
+though the host can. That is Docker's own resolver, not your connection: the embedded DNS on a
+user-defined network forwards to the host's, and it stops doing so after a VPN or network change more
+often than it should. In order of likelihood:
+
+1. Restart Docker Desktop.
+2. Give this one container a resolver: `CIRCUIT_DNS=1.1.1.1 docker compose --profile circuit up`.
+3. Fix it for every container, in Docker Desktop → Settings → Docker Engine: `{"dns": ["1.1.1.1", "8.8.8.8"]}`.
+
+**The name resolves but the connection does not complete.** Either the network needs a proxy — set
+`HTTP_PROXY` and `HTTPS_PROXY`, which are passed through to the container — or the Hub is blocked
+here, in which case set `HF_ENDPOINT` to a mirror.
+
+**Neither works.** Download the weights anywhere you like and hand the container a folder, so it
+never needs the network at all. Two pieces are wanted: the run, and the base model its config names.
+
+```powershell
+pip install huggingface_hub
+$env:HF_HOME = "C:/circuit-weights/huggingface"
+
+# 1. the run: adapter/, head.pt, config.json. The folder name is not cosmetic --
+#    it is what the entrypoint looks for.
+python -c "from huggingface_hub import snapshot_download; snapshot_download('jbarney/circuit-1.7b', revision='v1.2', local_dir='C:/circuit-weights/runs/jbarney__circuit-1.7b@v1.2')"
+
+# 2. the base model that run's config names, into the cache beside it
+python -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-1.7B-Base')"
+```
+
+Then point the service at that folder instead of the named volume:
+
+```dotenv
+CIRCUIT_WEIGHTS=C:/circuit-weights
+```
+
+`docker compose --profile circuit up` now finds both pieces present and starts straight into loading
+the model. For `circuit-8b` the names are `jbarney/circuit-8b`, revision `v1.1`, base
+`Qwen/Qwen3-8B-Base`.
+
+The same folder works the other way round: let one machine download the weights, then copy it to a
+machine with no internet at all.
+
 ## Without a GPU, without the download
 
 `tools/circuit-stub` serves the same contract from keyword rules, in an image that is the Python

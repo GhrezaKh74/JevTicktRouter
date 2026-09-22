@@ -126,10 +126,25 @@ services:
       # Empty means any non-empty bearer token is accepted, which is what a private network needs.
       # To require a real one, set CIRCUIT_API_KEY and SELF_HOSTED_API_KEY to the same value.
       S1_API_KEY: "${CIRCUIT_API_KEY:-}"
+
+      # Where the weights are fetched from, for the one boot that downloads them. Point this at a
+      # mirror where huggingface.co is unreachable. Never empty: huggingface_hub reads it as
+      # os.getenv("HF_ENDPOINT", default), so an empty value would replace the default with nothing.
+      HF_ENDPOINT: "${HF_ENDPOINT:-https://huggingface.co}"
+
+      # For a network that only reaches the internet through a proxy. Empty is the same as unset.
+      HTTP_PROXY: "${HTTP_PROXY:-}"
+      HTTPS_PROXY: "${HTTPS_PROXY:-}"
+      NO_PROXY: "${NO_PROXY:-}"
     volumes:
       # The run and the base model both live here, so they are downloaded once rather than on
-      # every `docker compose up`.
-      - circuit-weights:/weights
+      # every `docker compose up`. Set CIRCUIT_WEIGHTS to a host path to use a folder you can see
+      # instead of a named volume -- which is how weights downloaded elsewhere get in, on a machine
+      # where the container itself cannot reach the Hub.
+      - "${CIRCUIT_WEIGHTS:-circuit-weights}:/weights"
+    # Docker's own resolver, when the embedded one cannot forward to an upstream. Unset, and Compose
+    # leaves the setting out entirely, so the default behaviour is untouched.
+    dns: ${CIRCUIT_DNS:-}
     restart: unless-stopped
     # Uncomment to hand an NVIDIA card to the container. Needs the NVIDIA Container Toolkit on the
     # host, and an image built with the CUDA wheels (TORCH_INDEX_URL above).

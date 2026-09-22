@@ -494,6 +494,21 @@ For a CUDA card, build with `TORCH_INDEX_URL=https://pypi.org/simple` and uncomm
 reservation on the `circuit` service; [`tools/circuit/README.md`](tools/circuit/README.md) has the
 details.
 
+### Troubleshooting circuit
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `exec /opt/circuit/entrypoint.sh: no such file or directory` | A CRLF checkout: the kernel is looking for an interpreter called `/bin/sh\r` | `git pull` — the image strips CR itself now, and `.gitattributes` pins LF |
+| `Temporary failure in name resolution` on `huggingface.co` | Docker's embedded resolver stopped forwarding, usually after a VPN or network change | Restart Docker Desktop, or `CIRCUIT_DNS=1.1.1.1 docker compose --profile circuit up` |
+| The name resolves, the connection does not | The network needs a proxy, or the Hub is blocked | Set `HTTP_PROXY`/`HTTPS_PROXY`, or `HF_ENDPOINT` to a mirror |
+| Nothing reaches the Hub at all | — | Download the weights elsewhere and set `CIRCUIT_WEIGHTS` to that folder |
+| The container sits at `starting` for minutes | Normal: it is downloading, then loading the base model | `docker compose --profile circuit logs -f circuit` |
+| The first ticket times out | The model was still loading | Wait for `circuit listening on …` in the logs, then retry |
+
+The download is the only moment this needs the internet. [`tools/circuit/README.md`](tools/circuit/README.md)
+has the offline recipe: fetch the run and its base model anywhere, hand the container the folder, and
+it starts straight into loading the model.
+
 ### Troubleshooting Local mode
 
 The endpoint errors are specific, so match the message you see:

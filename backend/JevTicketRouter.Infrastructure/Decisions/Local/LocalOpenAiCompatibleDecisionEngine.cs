@@ -191,7 +191,10 @@ public sealed class LocalOpenAiCompatibleDecisionEngine : IDecisionEngine
             _logger.LogWarning(exception, "Could not reach the local AI endpoint.");
 
             throw new DecisionEngineException(
-                "Could not reach the local AI endpoint. Check that it is running and reachable.",
+                $"Could not reach the local AI endpoint at {_options.BaseUrl}. "
+                    + "If the app runs in a container, 'localhost' means the container itself: use "
+                    + "http://host.docker.internal:11434/v1 and start the model server with "
+                    + "OLLAMA_HOST=0.0.0.0 so it accepts connections from outside the host.",
                 AiProvider.Local,
                 DecisionFailureKind.Transport,
                 innerException: exception);
@@ -242,7 +245,10 @@ public sealed class LocalOpenAiCompatibleDecisionEngine : IDecisionEngine
             400 => "The local endpoint rejected the request. It may not support structured outputs; "
                 + "try setting LocalAi:UseStructuredOutputs to false.",
             401 or 403 => "The local endpoint rejected the configured credentials.",
-            404 => $"The local endpoint has no model named '{_options.Model}', or the base URL is wrong.",
+            404 => $"The local endpoint has no model named '{_options.Model}', or the base URL is wrong. "
+                + $"Tried {_options.BaseUrl}/{CompletionsPath}. The base URL must include the OpenAI "
+                + "compatibility segment, e.g. http://localhost:11434/v1 rather than "
+                + $"http://localhost:11434. Check the model is pulled with: ollama list",
             >= 500 => "The local endpoint reported an internal error.",
             _ => $"The local endpoint returned an unexpected status ({(int)status}).",
         };

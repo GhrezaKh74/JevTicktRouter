@@ -373,6 +373,53 @@ reports the active provider, making it a real readiness signal rather than just 
 
 The test project is not copied into the build, so tests are not part of producing a runtime image.
 
+### Troubleshooting Local mode
+
+The endpoint errors are specific, so match the message you see:
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| `Could not reach the local AI endpoint at ...` | The app cannot open a connection. In a container `localhost` is the container itself, never your machine. | Use `http://host.docker.internal:11434/v1`, and start Ollama with `OLLAMA_HOST=0.0.0.0`. |
+| `... has no model named 'x' ... Tried .../chat/completions` | Usually a base URL missing the `/v1` segment, or the model was never pulled. | The URL must end in `/v1`. Check the model with `ollama list`, pull it with `ollama pull <model>`. |
+| `LOCAL_AI_BASE_URL host '...' is not a loopback or private address` (at startup) | The endpoint guard refused a public address. | Point at a local or private address, or set `LocalAi:AllowPublicEndpoint=true` if it really is an internal gateway. |
+| `The local endpoint rejected the request` (400) | The server does not support strict structured outputs. | Set `LocalAi__UseStructuredOutputs=false`. |
+
+**Ollama on Windows, app in Docker** — the common combination, and it needs two things:
+
+1. Ollama must listen on all interfaces, not just loopback. Set a system environment variable
+   `OLLAMA_HOST` = `0.0.0.0`, then restart Ollama from the tray icon (quit and reopen — a reload is
+   not enough).
+2. The app must reach the host, not itself:
+
+```bash
+AI_PROVIDER=Local LOCAL_AI_MODEL=qwen2.5:7b-instruct \
+  LOCAL_AI_BASE_URL=http://host.docker.internal:11434/v1 \
+  docker compose up --build
+```
+
+**Ollama on Windows, app with `dotnet run`** — no container involved, so `localhost` is correct and
+`OLLAMA_HOST` does not need changing:
+
+```powershell
+$env:AI_PROVIDER      = "Local"
+$env:LOCAL_AI_BASE_URL = "http://localhost:11434/v1"
+$env:LOCAL_AI_MODEL    = "qwen2.5:7b-instruct"
+dotnet run --project backend/JevTicketRouter.Api
+```
+
+Environment variables set with `setx` only apply to **new** terminals. Use `$env:` as above for the
+current one.
+
+To check Ollama independently of this app:
+
+```bash
+ollama list                                   # is the model pulled?
+curl http://localhost:11434/v1/models         # does the OpenAI-compatible API answer?
+```
+
+The second one matters: Ollama's native API lives under `/api`, and its OpenAI-compatible API under
+`/v1`. This project speaks the OpenAI shape, so the `/v1` segment is required.
+
 ### Notes
 
 - `ASPNETCORE_ENVIRONMENT` is `Production` in the container. HTTPS redirection is skipped unless an

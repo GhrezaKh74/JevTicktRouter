@@ -1,0 +1,96 @@
+# ------------------------------------------------------------------------------------------------
+# JevTicketRouter
+#
+# Fast path — Mock mode, no setup, works offline:
+#
+#   docker compose up --build
+#   → http://localhost:8080
+#
+# With TypeSafe Jev:
+#
+#   AI_PROVIDER=Jev TYPESAFE_API_KEY=<your-key> docker compose up --build
+#
+# With a local model (pulls the model automatically, first run downloads several GB):
+#
+#   AI_PROVIDER=Local LOCAL_AI_MODEL=qwen2.5:7b-instruct \
+#     docker compose --profile local up --build
+#
+# Secrets are never written into this file. Put them in a .env beside it (copy .env.example);
+# Compose loads it automatically, and .env is already git-ignored.
+# ------------------------------------------------------------------------------------------------
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jevticketrouter:latest
+    container_name: jevticketrouter
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      # Which engine decides: Jev | Local | Mock.
+      # Mock by default so a bare `docker compose up` works with nothing configured.
+      AI_PROVIDER: "${AI_PROVIDER:-Mock}"
+
+      # Cloud provider. Empty means Mock mode, whatever AI_PROVIDER says.
+      TYPESAFE_API_KEY: "${TYPESAFE_API_KEY:-}"
+
+      # Local provider. Inside the Compose network the model server is reachable as `ollama`,
+      # which the endpoint guard accepts as an internal single-label host name.
+      LOCAL_AI_BASE_URL: "${LOCAL_AI_BASE_URL:-http://ollama:11434/v1}"
+      LOCAL_AI_MODEL: "${LOCAL_AI_MODEL:-}"
+      LOCAL_AI_API_KEY: "${LOCAL_AI_API_KEY:-}"
+
+      # A local model is much slower than a hosted API, especially on first load.
+      LocalAi__TimeoutSeconds: "${LOCAL_AI_TIMEOUT:-180}"
+
+      # Confidence below this escalates a ticket to a human.
+      Triage__MinimumConfidence: "${TRIAGE_MIN_CONFIDENCE:-0.75}"
+
+      ASPNETCORE_ENVIRONMENT: "Production"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  # Everything below only starts with `--profile local`. A plain `docker compose up` ignores it,
+  # so the default path stays small and quick.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: jevticketrouter-ollama
+    profiles: ["local"]
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      # Named volume, so a pulled model survives `docker compose down` instead of downloading again.
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+  # Pulls the model once, then exits. Without this the model server starts empty and the first
+  # ticket fails with "no model named ...", which is a confusing way to begin.
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: jevticketrouter-ollama-pull
+    profiles: ["local"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    entrypoint: ["/bin/sh", "-c", "ollama pull \"${LOCAL_AI_MODEL:-qwen2.5:7b-instruct}\""]
+    restart: "no"
+    volumes:
+      - ollama-models:/root/.ollama
+
+volumes:
+  ollama-models:

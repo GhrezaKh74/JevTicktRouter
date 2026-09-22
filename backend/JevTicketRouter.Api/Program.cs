@@ -59,7 +59,11 @@ app.Services.LogDecisionEngine();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
-if (!app.Environment.IsDevelopment())
+// Only redirect when an HTTPS port is actually configured. A container listens on plain HTTP
+// behind a TLS-terminating ingress, and redirecting there would break every request.
+var httpsPort = builder.Configuration["ASPNETCORE_HTTPS_PORT"] ?? builder.Configuration["HTTPS_PORT"];
+
+if (!app.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(httpsPort))
 {
     app.UseHttpsRedirection();
 }
@@ -80,7 +84,26 @@ app.MapTicketTriageEndpoints();
 app.MapHealthEndpoints();
 app.MapBenchmarkEndpoints();
 
-app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
+// In a container the built React app is copied into wwwroot, so one image serves both halves from
+// one origin: no CORS, no reverse proxy, and the client's relative /api calls just work.
+// During local development wwwroot does not exist, the Vite dev server owns the UI, and this whole
+// block is skipped so nothing about `dotnet run` changes.
+var webRoot = app.Environment.WebRootPath;
+var hasBuiltSpa = !string.IsNullOrEmpty(webRoot) && File.Exists(Path.Combine(webRoot, "index.html"));
+
+if (hasBuiltSpa)
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+
+    // Deep links such as /swagger stay on the server; everything else falls through to the SPA so a
+    // page refresh on a client-side route does not 404.
+    app.MapFallbackToFile("index.html").ExcludeFromDescription();
+}
+else
+{
+    app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
+}
 
 await app.RunAsync();
 

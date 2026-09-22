@@ -320,6 +320,67 @@ it a direction — no component changes.
 | [Node.js](https://nodejs.org/) | **22.x LTS** or newer | `node --version` |
 | npm | 10 or newer | ships with Node |
 | TypeSafe API key | optional | [console.typesafe.ai](https://console.typesafe.ai/settings/keys). Without one the app runs in Mock mode. |
+| [Docker](https://docs.docker.com/get-docker/) | optional | Only if you want the one-command route. See *Running with Docker*. |
+
+---
+
+## Running with Docker
+
+The quickest way to see it working. One image serves both halves from one origin, so there is no
+CORS setup and no reverse proxy to configure.
+
+```bash
+docker compose up --build
+```
+
+Open <http://localhost:8080>. With no API key it starts in **Mock mode**, so it works offline and
+needs nothing configured.
+
+Or without Compose:
+
+```bash
+docker build -t jevticketrouter .
+docker run --rm -p 8080:8080 jevticketrouter
+```
+
+### Choosing a provider
+
+```bash
+# TypeSafe Jev
+AI_PROVIDER=Jev TYPESAFE_API_KEY=<your-key> docker compose up --build
+
+# A local model. Starts Ollama alongside the app and pulls the model automatically.
+# The first run downloads several GB; after that the named volume keeps it.
+AI_PROVIDER=Local LOCAL_AI_MODEL=qwen2.5:7b-instruct \
+  docker compose --profile local up --build
+```
+
+Keys can also go in a `.env` file next to `docker-compose.yml` — Compose reads it automatically, and
+`.env` is already git-ignored. Copy `.env.example` to start.
+
+### What the image does
+
+| Stage | Base | Produces |
+| --- | --- | --- |
+| 1 | `node:22-alpine` | The React app built to static files |
+| 2 | `mcr.microsoft.com/dotnet/sdk:10.0-alpine` | The published API |
+| 3 | `mcr.microsoft.com/dotnet/aspnet:10.0-alpine` | Runtime: API + the SPA in `wwwroot` |
+
+Manifests are copied before source in both build stages, so editing code does not re-run
+`npm ci` or `dotnet restore`. The container runs as the non-root `app` user, listens on **8080**
+(not 80, so a non-root user can bind it), and has a health check that polls `/api/health` — which
+reports the active provider, making it a real readiness signal rather than just "the process is up".
+
+The test project is not copied into the build, so tests are not part of producing a runtime image.
+
+### Notes
+
+- `ASPNETCORE_ENVIRONMENT` is `Production` in the container. HTTPS redirection is skipped unless an
+  HTTPS port is explicitly configured, because a container normally sits behind a TLS-terminating
+  ingress and redirecting there would break every request.
+- The API only serves the SPA when `wwwroot/index.html` exists. During local development it does
+  not, the Vite dev server owns the UI, and `dotnet run` behaves exactly as before.
+- Swagger stays available at <http://localhost:8080/swagger>.
 
 ---
 

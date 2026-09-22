@@ -1,0 +1,58 @@
+# Keep the build context small and the layer cache useful. Without this, node_modules and the
+# bin/obj trees are uploaded to the daemon on every build and the image balloons.
+
+# --- Dependencies and build output -------------------------------------------
+**/node_modules
+**/dist
+**/dist-ssr
+**/bin
+**/obj
+**/out
+**/.vite
+**/*.tsbuildinfo
+**/coverage
+**/TestResults
+
+# --- Secrets: must never reach an image layer ---------------------------------
+**/.env
+**/.env.*
+!**/.env.example
+**/secrets.json
+**/appsettings.*.local.json
+**/appsettings.Local.json
+**/appsettings.Production.json
+**/*.pfx
+**/*.p12
+**/*.key
+**/*.pem
+
+# --- Local AI artefacts -------------------------------------------------------
+models/
+**/*.gguf
+**/*.safetensors
+**/*.onnx
+.ollama/
+
+# --- Version control, CI, editors --------------------------------------------
+.git
+.gitignore
+.github
+.vs
+.vscode
+.idea
+**/*.swp
+**/*.user
+
+# --- Docs and screenshots: not needed at runtime ------------------------------
+docs/
+README.md
+*.md
+
+# --- Docker's own files -------------------------------------------------------
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# --- OS noise -----------------------------------------------------------------
+**/.DS_Store
+**/Thumbs.db

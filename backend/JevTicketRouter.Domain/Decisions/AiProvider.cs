@@ -17,4 +17,12 @@ public enum AiProvider
 
     /// <summary>Deterministic sample answers. No model, no network.</summary>
     Mock = 2,
+
+    /// <summary>
+    /// A self-hosted System One model speaking the same <c>/v1/systemone</c> contract as Jev, run
+    /// inside the organisation's own network. The reference implementation is
+    /// <see href="https://github.com/Barneyjm/circuit">circuit</see>, whose open weights answer
+    /// typed questions with calibrated probabilities exactly as the hosted API does.
+    /// </summary>
+    SelfHosted = 3,
 }

@@ -19,10 +19,14 @@ export const fa: Messages = {
     github: 'مشاهدهٔ کد روی GitHub',
     language: 'زبان',
     modeLive: 'Jev زنده',
+    modeSelfHosted: 'خودمیزبان',
     modeLocal: 'هوش مصنوعی محلی',
     modeMock: 'حالت آزمایشی',
     modeUnknown: 'API در دسترس نیست',
     modeLiveHint: 'فراخوانی API سرویس TypeSafe با مدل {{model}}.',
+    modeSelfHostedHint:
+      'مدلی از نوع System One که روی سخت‌افزار خودتان اجرا می‌شود و به همان سؤال‌های تایپ‌شدهٔ API ابری ' +
+      'پاسخ می‌دهد. هیچ درخواستی از سازمان خارج نمی‌شود.',
     modeLocalHint:
       'تصمیم‌ها را مدلی درون شبکهٔ خودتان می‌گیرد. هیچ درخواستی از سازمان خارج نمی‌شود.',
     modeMockHint:

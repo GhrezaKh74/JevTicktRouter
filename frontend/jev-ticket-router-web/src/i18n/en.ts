@@ -14,10 +14,14 @@ export const en = {
     github: 'View the source on GitHub',
     language: 'Language',
     modeLive: 'Live Jev',
+    modeSelfHosted: 'Self-hosted',
     modeLocal: 'Local AI',
     modeMock: 'Mock mode',
     modeUnknown: 'API offline',
     modeLiveHint: 'Calling the TypeSafe API with model {{model}}.',
+    modeSelfHostedHint:
+      'A System One model running on your own hardware, answering the same typed questions as the ' +
+      'hosted API. No request leaves the organisation.',
     modeLocalHint:
       'Decisions are made by a model inside your own network. No request leaves the organisation.',
     modeMockHint: 'No AI provider is configured, so triage returns deterministic sample answers.',

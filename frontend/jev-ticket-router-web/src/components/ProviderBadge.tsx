@@ -3,6 +3,7 @@ import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 import CloudIcon from '@mui/icons-material/Cloud';
 import DnsIcon from '@mui/icons-material/Dns';
+import MemoryIcon from '@mui/icons-material/Memory';
 import ScienceIcon from '@mui/icons-material/Science';
 import type { AiProvider } from '../api/types';
 
@@ -46,6 +47,13 @@ export function ProviderBadge({
       color: 'success',
       variant: 'filled',
       icon: <CloudIcon />,
+    },
+    SelfHosted: {
+      label: t('header.modeSelfHosted'),
+      hint: t('header.modeSelfHostedHint'),
+      color: 'secondary',
+      variant: 'filled',
+      icon: <MemoryIcon />,
     },
     Local: {
       label: t('header.modeLocal'),

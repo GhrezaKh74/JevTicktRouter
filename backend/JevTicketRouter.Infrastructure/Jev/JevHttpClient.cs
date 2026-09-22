@@ -13,6 +13,8 @@ namespace JevTicketRouter.Infrastructure.Jev;
 /// Calls <c>POST /v1/systemone</c> on the TypeSafe API over a pooled <see cref="HttpClient"/> from
 /// <c>IHttpClientFactory</c>.
 /// <para>
+/// The same client also serves a self-hosted System One model, which speaks this contract
+/// verbatim, so its messages name the endpoint rather than the vendor.
 /// TypeSafe publishes Python and JavaScript SDKs but no .NET SDK, so this project calls the
 /// documented HTTP API directly. Retries for <c>429</c> and <c>529</c> are handled by the resilience
 /// handler configured in <see cref="DependencyInjection"/>; this class is responsible for
@@ -84,7 +86,7 @@ public sealed class JevHttpClient : IJevClient
         {
             _logger.LogWarning(exception, "Jev evaluation failed to reach the TypeSafe API.");
             throw new JevClientException(
-                "Could not reach the TypeSafe API.",
+                $"Could not reach the System One endpoint at {_options.BaseUrl}.",
                 statusCode: null,
                 innerException: exception);
         }
@@ -104,7 +106,7 @@ public sealed class JevHttpClient : IJevClient
 
                 if (payload is null)
                 {
-                    throw new JevClientException("The TypeSafe API returned an empty response body.");
+                    throw new JevClientException("The System One endpoint returned an empty response body.");
                 }
 
                 _logger.LogDebug(
@@ -118,7 +120,7 @@ public sealed class JevHttpClient : IJevClient
             catch (JsonException exception)
             {
                 throw new JevClientException(
-                    "The TypeSafe API returned a response that could not be parsed.",
+                    "The System One endpoint returned a response that could not be parsed.",
                     response.StatusCode,
                     exception);
             }
@@ -146,13 +148,13 @@ public sealed class JevHttpClient : IJevClient
 
         var message = (int)status switch
         {
-            401 => "The TypeSafe API rejected the configured credentials.",
-            403 => "The configured TypeSafe credentials are not permitted to use this model.",
-            422 => "The TypeSafe API rejected the triage request as invalid.",
-            429 => "The TypeSafe API rate limit was exceeded. Please retry shortly.",
-            529 => "The TypeSafe API is temporarily overloaded. Please retry shortly.",
-            >= 500 => "The TypeSafe API reported an internal error.",
-            _ => $"The TypeSafe API returned an unexpected status ({(int)status}).",
+            401 => "The System One endpoint rejected the configured credentials.",
+            403 => "The configured credentials are not permitted to use this model.",
+            422 => "The System One endpoint rejected the triage request as invalid.",
+            429 => "The System One endpoint rate limit was exceeded. Please retry shortly.",
+            529 => "The System One endpoint is temporarily overloaded. Please retry shortly.",
+            >= 500 => "The System One endpoint reported an internal error.",
+            _ => $"The System One endpoint returned an unexpected status ({(int)status}).",
         };
 
         _logger.LogWarning(

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace JevTicketRouter.Application.Jev.Contracts;
@@ -53,9 +54,13 @@ public sealed record JevAnswer
     [JsonPropertyName("score")]
     public double? Score { get; init; }
 
-    /// <summary>Score answers only: each level number mapped back to its description.</summary>
+    /// <summary>
+    /// Score answers only: each level number mapped back to its description. Typed as a raw JSON
+    /// element because implementations differ on the value type, and nothing here reads it — a
+    /// stricter type would turn a cosmetic difference into a failed response.
+    /// </summary>
     [JsonPropertyName("legend")]
-    public IReadOnlyDictionary<string, string>? Legend { get; init; }
+    public IReadOnlyDictionary<string, JsonElement>? Legend { get; init; }
 
     /// <summary>Choice and score answers: the probability of each option or level. Sums to 1.</summary>
     [JsonPropertyName("probabilities")]

@@ -142,8 +142,9 @@ prescribe.
 
 **Backend**
 - Clean architecture with enforced dependency boundaries and nullable reference types everywhere.
-- **Provider-agnostic AI layer**: one `IDecisionEngine` interface, three engines (Jev, Local, Mock),
-  selected by `AI_PROVIDER` through dependency injection. See *Cloud-to-Local Migration*.
+- **Provider-agnostic AI layer**: one `IDecisionEngine` interface and four providers (Jev,
+  SelfHosted, Local, Mock), selected by `AI_PROVIDER` through dependency injection.
+  See *Cloud-to-Local Migration*.
 - **Local-first option**: any OpenAI-compatible endpoint inside your own network, with strict JSON
   schema output, safe validation, and a startup guard that refuses non-local addresses.
 - `POST /api/tickets/triage`, `GET /api/health`, and `POST /api/benchmark`.
@@ -156,7 +157,7 @@ prescribe.
 - Structured logging that never contains the ticket description or the API key.
 - Mock mode when no key is configured, clearly labelled in logs, the API, and the UI.
 - OpenAPI document with worked request and response examples, served through Swagger UI.
-- 227 tests across the rules, validation, redaction, answer mapping, provider selection, the
+- 236 tests across the rules, validation, redaction, answer mapping, provider selection, the
   local endpoint guard, malformed-response handling, the benchmark, and the HTTP API.
 
 **Frontend**
@@ -173,7 +174,7 @@ prescribe.
 - **Fully bilingual interface (English and Persian) with real RTL support** — see below.
 - Persian and English ticket text both render correctly, independently of the interface language.
 - A prominent provider badge: **Live Jev**, **Local AI**, or **Mock mode**.
-- 66 tests with Vitest and React Testing Library.
+- 71 tests with Vitest and React Testing Library.
 
 ---
 
@@ -205,6 +206,46 @@ path, the API contract, the React client — is provider-agnostic and untouched 
 | `TypeSafeJevDecisionEngine` | `Jev` | `POST https://api.typesafe.ai/v1/systemone`, one batched call using Choice, Score, and Noul. |
 | `LocalOpenAiCompatibleDecisionEngine` | `Local` | `POST {LOCAL_AI_BASE_URL}/chat/completions` on a self-hosted endpoint. Never leaves your network. |
 | `MockDecisionEngine` | `Mock` | Nothing. Deterministic sample answers for development. |
+
+A fourth option reuses the Jev engine against weights you host yourself — see below.
+
+### Self-hosted System One (circuit)
+
+Jev itself is not open-weights, but [circuit](https://github.com/Barneyjm/circuit) is: open System
+One models that answer typed questions with calibrated probabilities in a single forward pass, and
+that **serve TypeSafe's `POST /v1/systemone` contract verbatim**.
+
+That last part is why this took almost no code. The request shape, the three primitives, and the
+answer shape — including the detail that `noul` answers carry no confidence — are identical, so this
+provider reuses the existing client, question set, and answer mapper. Only the address changes.
+
+```bash
+# 1. Serve the model (see the circuit README for getting the weights into runs/)
+git clone https://github.com/Barneyjm/circuit && cd circuit
+uv sync
+S1_MODEL=lora:runs/circuit-8b uv run python -m s1proto     # POST /v1/systemone on :8901
+
+# 2. Point the app at it
+AI_PROVIDER=SelfHosted SELF_HOSTED_BASE_URL=http://localhost:8901 \
+  dotnet run --project backend/JevTicketRouter.Api
+```
+
+The header badge reads **Self-hosted**, and `GET /api/health` reports `"provider": "SelfHosted"` —
+deliberately not "Jev", because saying Jev for a model you are running yourself would be exactly the
+kind of false provenance this project spends so much effort avoiding.
+
+| Model | Base | Notes |
+| --- | --- | --- |
+| `circuit-1.7b` | Qwen3-1.7B | Lighter, fits a small card |
+| `circuit-8b` | Qwen3-8B | More accurate; ~17 GB, or set `load_4bit: true` in `config.json` for a 12 GB card |
+
+**This will not work through Ollama.** The calibrated probabilities come from a pointer readout head
+on top of the LoRA, and a plain GGUF conversion drops that head — the model would still answer, but
+the numbers would no longer mean what they claim. Run circuit's own server.
+
+The same endpoint guard as Local mode applies: `SELF_HOSTED_BASE_URL` must be loopback or private
+unless an administrator overrides it, since running the weights yourself is pointless if the address
+turns out to be someone else's server.
 
 ### Switching to Local mode
 
@@ -586,14 +627,14 @@ curl -X POST http://localhost:5217/api/tickets/triage \
 
 ## Running the tests
 
-**Backend** (227 tests — rules, validation, redaction, answer mapping, provider selection, the local
+**Backend** (236 tests — rules, validation, redaction, answer mapping, provider selection, the local
 endpoint guard, malformed-response handling, the benchmark, and the HTTP API end to end):
 
 ```bash
 dotnet test
 ```
 
-**Frontend** (66 tests):
+**Frontend** (71 tests):
 
 ```bash
 cd frontend/jev-ticket-router-web

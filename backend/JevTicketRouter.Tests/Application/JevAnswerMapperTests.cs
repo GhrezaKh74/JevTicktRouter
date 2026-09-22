@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using JevTicketRouter.Application.Jev;
 using JevTicketRouter.Application.Jev.Abstractions;
@@ -153,7 +154,12 @@ public sealed class JevAnswerMapperTests
             Type = "score",
             Score = 1.2,
             Probabilities = new Dictionary<string, double> { ["0"] = 0.1, ["1"] = 0.6, ["2"] = 0.3 },
-            Legend = new Dictionary<string, string> { ["0"] = "Low", ["1"] = "Medium", ["2"] = "High" },
+            Legend = new Dictionary<string, JsonElement>
+            {
+                ["0"] = JsonSerializer.SerializeToElement("Low"),
+                ["1"] = JsonSerializer.SerializeToElement("Medium"),
+                ["2"] = JsonSerializer.SerializeToElement("High"),
+            },
             Confidence = 0.82,
         };
 

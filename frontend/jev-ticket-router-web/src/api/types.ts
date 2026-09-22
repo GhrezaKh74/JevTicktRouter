@@ -56,7 +56,7 @@ export interface JevStateSummary {
 }
 
 /** Which engine produced a decision. */
-export const AI_PROVIDERS = ['Jev', 'Local', 'Mock'] as const;
+export const AI_PROVIDERS = ['Jev', 'SelfHosted', 'Local', 'Mock'] as const;
 
 /** A decision provider. */
 export type AiProvider = (typeof AI_PROVIDERS)[number];

@@ -6,6 +6,7 @@ using JevTicketRouter.Domain.Decisions;
 using JevTicketRouter.Infrastructure.Benchmarking;
 using JevTicketRouter.Infrastructure.Decisions;
 using JevTicketRouter.Infrastructure.Decisions.Local;
+using JevTicketRouter.Infrastructure.Decisions.SelfHosted;
 using JevTicketRouter.Infrastructure.Jev;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,11 +44,14 @@ public static class DependencyInjection
 
         var triageModel = configuration.GetSection(TriageOptions.SectionName)["Model"];
 
+        var selfHostedOptions = ReadSelfHostedOptions(configuration);
+
         var selection = DecisionEngineResolver.Resolve(
             providerOptions,
             jevOptions,
             localOptions,
-            string.IsNullOrWhiteSpace(triageModel) ? "jev-latest" : triageModel);
+            string.IsNullOrWhiteSpace(triageModel) ? "jev-latest" : triageModel,
+            selfHostedOptions);
 
         services.AddSingleton(selection);
 
@@ -71,9 +75,17 @@ public static class DependencyInjection
             AddLocalEngine(services);
         }
 
+        // A self-hosted System One model speaks the same contract, so it reuses the Jev client and
+        // mapper with a different address rather than duplicating the protocol.
+        if (selection.Provider == AiProvider.SelfHosted)
+        {
+            AddSelfHostedEngine(services, selfHostedOptions);
+        }
+
         services.AddSingleton<IDecisionEngine>(provider => selection.Provider switch
         {
-            AiProvider.Jev => provider.GetRequiredService<TypeSafeJevDecisionEngine>(),
+            AiProvider.Jev or AiProvider.SelfHosted =>
+                provider.GetRequiredService<TypeSafeJevDecisionEngine>(),
             AiProvider.Local => provider.GetRequiredService<LocalOpenAiCompatibleDecisionEngine>(),
             _ => provider.GetRequiredService<MockDecisionEngine>(),
         });
@@ -128,7 +140,7 @@ public static class DependencyInjection
             logger.LogInformation("AI provider: {Provider}. {Reason}", selection.Provider, selection.Reason);
         }
 
-        if (selection.Provider == AiProvider.Local)
+        if (selection.Provider is AiProvider.Local or AiProvider.SelfHosted)
         {
             logger.LogInformation(
                 "Local mode makes no internet calls: no telemetry, no analytics, no cloud fallback, "
@@ -164,6 +176,13 @@ public static class DependencyInjection
                     options.ApiKey = Environment.GetEnvironmentVariable(JevOptions.ApiKeyEnvironmentVariable);
                 }
             })
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services
+            .AddOptions<SelfHostedOptions>()
+            .Bind(configuration.GetSection(SelfHostedOptions.SectionName))
+            .Configure(ApplySelfHostedEnvironment)
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
@@ -205,6 +224,28 @@ public static class DependencyInjection
             });
 
         services.AddSingleton<TypeSafeJevDecisionEngine>();
+    }
+
+    /// <summary>
+    /// Registers the self-hosted System One engine. The transport, the question set, and the answer
+    /// mapper are the hosted API's — only the endpoint and the credential differ — so this points
+    /// the same typed client at the local server instead of introducing a parallel stack.
+    /// </summary>
+    private static void AddSelfHostedEngine(IServiceCollection services, SelfHostedOptions options)
+    {
+        services.Configure<JevOptions>(jev =>
+        {
+            jev.BaseUrl = options.BaseUrl;
+            jev.EvaluationPath = options.EvaluationPath;
+            jev.ApiKey = options.ApiKey;
+            jev.TimeoutSeconds = options.TimeoutSeconds;
+            jev.MaxRetryAttempts = options.MaxRetryAttempts;
+            jev.ForceMockMode = false;
+        });
+
+        services.Configure<TriageOptions>(triage => triage.Model = options.Model);
+
+        AddJevEngine(services);
     }
 
     private static void AddLocalEngine(IServiceCollection services)
@@ -278,6 +319,37 @@ public static class DependencyInjection
         }
 
         return options;
+    }
+
+    private static SelfHostedOptions ReadSelfHostedOptions(IConfiguration configuration)
+    {
+        var options = new SelfHostedOptions();
+        configuration.GetSection(SelfHostedOptions.SectionName).Bind(options);
+        ApplySelfHostedEnvironment(options);
+
+        return options;
+    }
+
+    /// <summary>Lets the bare environment variables override bound configuration.</summary>
+    private static void ApplySelfHostedEnvironment(SelfHostedOptions options)
+    {
+        var baseUrl = Environment.GetEnvironmentVariable(SelfHostedOptions.BaseUrlEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+        {
+            options.BaseUrl = baseUrl;
+        }
+
+        var model = Environment.GetEnvironmentVariable(SelfHostedOptions.ModelEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            options.Model = model;
+        }
+
+        var apiKey = Environment.GetEnvironmentVariable(SelfHostedOptions.ApiKeyEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            options.ApiKey = apiKey;
+        }
     }
 
     private static LocalAiOptions ReadLocalOptions(IConfiguration configuration)

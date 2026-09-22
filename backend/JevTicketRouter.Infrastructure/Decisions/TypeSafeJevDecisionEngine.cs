@@ -23,20 +23,31 @@ public sealed class TypeSafeJevDecisionEngine : IDecisionEngine
 {
     private readonly IJevClient _client;
     private readonly TriageOptions _options;
+    private readonly AiProvider _provider;
 
     /// <summary>Creates the engine.</summary>
     /// <param name="client">The Jev transport.</param>
     /// <param name="options">Model name and thresholds.</param>
-    public TypeSafeJevDecisionEngine(IJevClient client, IOptions<TriageOptions> options)
+    /// <param name="selection">
+    /// Which provider the resolver settled on. The same client and mapper serve both the hosted API
+    /// and a self-hosted System One model, so the engine is told which one it is rather than
+    /// guessing from its own configuration.
+    /// </param>
+    public TypeSafeJevDecisionEngine(
+        IJevClient client,
+        IOptions<TriageOptions> options,
+        DecisionEngineSelection selection)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(selection);
 
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _options = options.Value;
+        _provider = selection.Provider;
     }
 
     /// <inheritdoc />
-    public AiProvider Provider => _client.IsLive ? AiProvider.Jev : AiProvider.Mock;
+    public AiProvider Provider => _client.IsLive ? _provider : AiProvider.Mock;
 
     /// <inheritdoc />
     public bool IsLive => _client.IsLive;

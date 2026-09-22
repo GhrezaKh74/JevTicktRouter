@@ -110,6 +110,19 @@ public sealed class TypeSafeJevDecisionEngineTests
     }
 
     [Fact]
+    public async Task EvaluateAsync_TagsTheResultWithWhicheverProviderTheResolverPicked()
+    {
+        // The same client and mapper serve the hosted API and a self-hosted System One model, so
+        // the engine must report the one actually in use rather than assuming Jev.
+        GivenAnswers();
+
+        var result = await CreateEngine(AiProvider.SelfHosted)
+            .EvaluateAsync(Input(), CancellationToken.None);
+
+        result.Provider.Should().Be(AiProvider.SelfHosted);
+    }
+
+    [Fact]
     public async Task EvaluateAsync_TurnsATransportFailureIntoATransientEngineFailure()
     {
         _client.IsLive.Returns(true);
@@ -169,8 +182,11 @@ public sealed class TypeSafeJevDecisionEngineTests
         exception.IsTransient.Should().BeFalse();
     }
 
-    private TypeSafeJevDecisionEngine CreateEngine() =>
-        new(_client, Options.Create(new TriageOptions()));
+    private TypeSafeJevDecisionEngine CreateEngine(AiProvider provider = AiProvider.Jev) =>
+        new(
+            _client,
+            Options.Create(new TriageOptions()),
+            new DecisionEngineSelection(provider, provider, "jev-latest", "test"));
 
     private JevSystemOneRequest CapturedRequest()
     {

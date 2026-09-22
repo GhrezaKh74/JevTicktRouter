@@ -1,5 +1,6 @@
 using JevTicketRouter.Domain.Decisions;
 using JevTicketRouter.Infrastructure.Decisions.Local;
+using JevTicketRouter.Infrastructure.Decisions.SelfHosted;
 using JevTicketRouter.Infrastructure.Jev;
 
 namespace JevTicketRouter.Infrastructure.Decisions;
@@ -28,11 +29,13 @@ public static class DecisionEngineResolver
     /// somewhere the operator did not intend, so this fails loudly instead.
     /// </exception>
     /// <param name="jevModel">The Jev model name, reported when Jev or Mock answers.</param>
+    /// <param name="selfHostedOptions">Self-hosted System One settings.</param>
     public static DecisionEngineSelection Resolve(
         AiProviderOptions providerOptions,
         JevOptions jevOptions,
         LocalAiOptions localOptions,
-        string jevModel = "jev-latest")
+        string jevModel = "jev-latest",
+        SelfHostedOptions? selfHostedOptions = null)
     {
         ArgumentNullException.ThrowIfNull(providerOptions);
         ArgumentNullException.ThrowIfNull(jevOptions);
@@ -59,6 +62,8 @@ public static class DecisionEngineResolver
                 "Mock mode was requested explicitly. No model is called and no network request is made."),
 
             AiProvider.Local => ResolveLocal(requested, localOptions),
+
+            AiProvider.SelfHosted => ResolveSelfHosted(requested, selfHostedOptions ?? new SelfHostedOptions()),
 
             _ => ResolveJev(requested, jevOptions, jevModel),
         };
@@ -90,6 +95,42 @@ public static class DecisionEngineResolver
             requested,
             options.Model!,
             $"Local mode. Calling {options.BaseUrl} with model '{options.Model}'. {verdict.Reason}");
+    }
+
+    /// <summary>
+    /// A self-hosted System One model. Guarded exactly like local mode: the point of running the
+    /// weights yourself is that ticket text never leaves the network, and a base URL pointing
+    /// somewhere public would undo that silently.
+    /// </summary>
+    private static DecisionEngineSelection ResolveSelfHosted(
+        AiProvider requested,
+        SelfHostedOptions options)
+    {
+        if (!options.IsConfigured)
+        {
+            return new DecisionEngineSelection(
+                AiProvider.Mock,
+                requested,
+                MockModel,
+                $"A self-hosted model was requested but {SelfHostedOptions.BaseUrlEnvironmentVariable} "
+                    + "is not set. Falling back to Mock mode.");
+        }
+
+        var verdict = LocalEndpointGuard.Inspect(options.BaseUrl, options.AllowPublicEndpoint);
+
+        if (!verdict.IsAllowed)
+        {
+            // Fatal for the same reason as local mode: falling back quietly could route restricted
+            // tickets somewhere the operator never approved.
+            throw new InvalidOperationException(verdict.Reason);
+        }
+
+        return new DecisionEngineSelection(
+            AiProvider.SelfHosted,
+            requested,
+            string.IsNullOrWhiteSpace(options.Model) ? "self-hosted" : options.Model,
+            $"Self-hosted System One. Calling {options.BaseUrl}{options.EvaluationPath} "
+                + $"with model '{options.Model}'. {verdict.Reason}");
     }
 
     private static DecisionEngineSelection ResolveJev(

@@ -2,6 +2,7 @@ using FluentAssertions;
 using JevTicketRouter.Domain.Decisions;
 using JevTicketRouter.Infrastructure.Decisions;
 using JevTicketRouter.Infrastructure.Decisions.Local;
+using JevTicketRouter.Infrastructure.Decisions.SelfHosted;
 using JevTicketRouter.Infrastructure.Jev;
 
 namespace JevTicketRouter.Tests.Decisions;
@@ -95,6 +96,69 @@ public sealed class DecisionEngineResolverTests
     }
 
     [Fact]
+    public void Resolve_SelfHostedWithALoopbackEndpoint_SelectsSelfHosted()
+    {
+        var selection = Resolve("SelfHosted", selfHosted: SelfHosted());
+
+        selection.Provider.Should().Be(AiProvider.SelfHosted);
+        selection.FellBack.Should().BeFalse();
+        selection.Model.Should().Be("circuit-8b");
+        selection.Reason.Should().Contain("8901");
+    }
+
+    [Fact]
+    public void Resolve_SelfHostedPointingAtAPublicEndpoint_Throws()
+    {
+        // Running the weights yourself is pointless if the address is someone else's server, so
+        // this fails loudly rather than degrading to another provider.
+        var options = SelfHosted();
+        options.BaseUrl = "https://someone-elses-host.com";
+
+        var act = () => Resolve("SelfHosted", selfHosted: options);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*not a loopback or private address*");
+    }
+
+    [Fact]
+    public void Resolve_SelfHostedPointingAtAPublicEndpointWithTheOverride_Selects()
+    {
+        var options = SelfHosted();
+        options.BaseUrl = "https://systemone.corp.example.com";
+        options.AllowPublicEndpoint = true;
+
+        Resolve("SelfHosted", selfHosted: options).Provider.Should().Be(AiProvider.SelfHosted);
+    }
+
+    [Fact]
+    public void Resolve_SelfHostedWithoutABaseUrl_FallsBackToMock()
+    {
+        var options = SelfHosted();
+        options.BaseUrl = string.Empty;
+
+        var selection = Resolve("SelfHosted", selfHosted: options);
+
+        selection.Provider.Should().Be(AiProvider.Mock);
+        selection.Reason.Should().Contain(SelfHostedOptions.BaseUrlEnvironmentVariable);
+    }
+
+    [Fact]
+    public void Resolve_SelfHostedDoesNotNeedATypeSafeKey()
+    {
+        // The whole point is that no hosted credential is involved.
+        Resolve("SelfHosted", jev: new JevOptions(), selfHosted: SelfHosted())
+            .Provider.Should().Be(AiProvider.SelfHosted);
+    }
+
+    [Fact]
+    public void Resolve_SelfHostedDefaultsToCircuitsOwnPort()
+    {
+        // circuit's s1proto server listens on 8901; the default should not need overriding.
+        new SelfHostedOptions().BaseUrl.Should().Contain("8901");
+        new SelfHostedOptions().EvaluationPath.Should().Be("/v1/systemone");
+    }
+
+    [Fact]
     public void Resolve_MockRequestedExplicitly_SelectsMock()
     {
         var selection = Resolve("Mock", jev: WithKey(), local: WithLocalModel());
@@ -151,11 +215,19 @@ public sealed class DecisionEngineResolverTests
     private static DecisionEngineSelection Resolve(
         string provider,
         JevOptions? jev = null,
-        LocalAiOptions? local = null) =>
+        LocalAiOptions? local = null,
+        SelfHostedOptions? selfHosted = null) =>
         DecisionEngineResolver.Resolve(
             new AiProviderOptions { Provider = provider },
             jev ?? new JevOptions(),
-            local ?? new LocalAiOptions());
+            local ?? new LocalAiOptions(),
+            selfHostedOptions: selfHosted ?? new SelfHostedOptions());
+
+    private static SelfHostedOptions SelfHosted() => new()
+    {
+        BaseUrl = "http://localhost:8901",
+        Model = "circuit-8b",
+    };
 
     private static JevOptions WithKey() => new() { ApiKey = "test-key-not-a-real-credential" };
 

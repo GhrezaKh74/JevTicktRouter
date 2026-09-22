@@ -107,9 +107,13 @@ public sealed class MockJevClient : IJevClient
         // The documented score is the probability-weighted position across the levels.
         var score = probabilities.Sum(pair => int.Parse(pair.Key, CultureInfo.InvariantCulture) * pair.Value);
 
+        // The contract types legend values as raw JSON, so the descriptions are wrapped as such.
         var legend = JevTriageQuestions.PriorityLevels
             .Select((description, index) => (Key: index.ToString(CultureInfo.InvariantCulture), description))
-            .ToDictionary(pair => pair.Key, pair => pair.description, StringComparer.Ordinal);
+            .ToDictionary(
+                pair => pair.Key,
+                pair => JsonSerializer.SerializeToElement(pair.description),
+                StringComparer.Ordinal);
 
         return new JevAnswer
         {

@@ -410,6 +410,16 @@ dotnet run --project backend/JevTicketRouter.Api
 Environment variables set with `setx` only apply to **new** terminals. Use `$env:` as above for the
 current one.
 
+**Choosing a model.** Any instruction-tuned chat model works; `gemma3:12b` and `qwen3.6` are both
+fine choices. Avoid vision (`*vl*`), OCR, and creative-writing fine-tunes — they are poor at strict
+JSON. If the endpoint answers `400`, it does not accept strict structured outputs; set
+`LocalAi__UseStructuredOutputs=false` and the reply is still validated locally.
+
+> **Models tagged `:cloud` in Ollama run on Ollama's servers, not on your machine.** Selecting one
+> sends ticket text out of your network and defeats the entire point of Local mode. The endpoint
+> guard cannot catch this — `localhost` is genuinely local; it is the *model* that is remote. Pick a
+> model with a real size in `ollama list`.
+
 To check Ollama independently of this app:
 
 ```bash

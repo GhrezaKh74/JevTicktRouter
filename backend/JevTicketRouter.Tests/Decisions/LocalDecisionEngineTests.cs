@@ -244,6 +244,55 @@ public sealed class LocalDecisionEngineTests
     }
 
     [Fact]
+    public async Task EvaluateAsync_WhenTheModelIsMissing_NamesTheModelsTheEndpointDoesHave()
+    {
+        // The usual way this fails is a model name that was never pulled. Listing what the endpoint
+        // can actually serve turns a dead end into an obvious fix.
+        var handler = new RoutingHandler
+        {
+            ChatResponse = new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent("{\"error\":\"model not found\"}", Encoding.UTF8, "application/json"),
+            },
+            ModelsResponse = Json(
+                "{\"object\":\"list\",\"data\":["
+                + "{\"id\":\"gemma3:12b\"},{\"id\":\"qwen3.6:latest\"}]}"),
+        };
+
+        var engine = CreateEngine(handler);
+
+        var act = async () => await engine.EvaluateAsync(Input(), CancellationToken.None);
+
+        var exception = (await act.Should().ThrowAsync<DecisionEngineException>()).Which;
+        exception.Kind.Should().Be(DecisionFailureKind.Provider);
+        exception.Message.Should().Contain("gemma3:12b").And.Contain("qwen3.6:latest");
+        handler.ModelsRequests.Should().Be(1, "the model list is only consulted to explain a failure");
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WhenTheModelListCannotBeRead_StillReportsTheOriginalFailure()
+    {
+        // The diagnostic is best-effort: if it fails too, it must not replace the real error.
+        var handler = new RoutingHandler
+        {
+            ChatResponse = new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+            },
+            ModelsResponse = new HttpResponseMessage(HttpStatusCode.InternalServerError)
+            {
+                Content = new StringContent("boom", Encoding.UTF8, "text/plain"),
+            },
+        };
+
+        var act = async () => await CreateEngine(handler).EvaluateAsync(Input(), CancellationToken.None);
+
+        var exception = (await act.Should().ThrowAsync<DecisionEngineException>()).Which;
+        exception.Kind.Should().Be(DecisionFailureKind.Provider);
+        exception.Message.Should().Contain("no model named");
+    }
+
+    [Fact]
     public async Task EvaluateAsync_WhenTheEndpointIsUnreachable_ReportsATransientTransportFailure()
     {
         var engine = CreateEngine(new StubHandler(new HttpRequestException("connection refused")));
@@ -306,7 +355,7 @@ public sealed class LocalDecisionEngineTests
     };
 
     private static LocalOpenAiCompatibleDecisionEngine CreateEngine(
-        StubHandler handler,
+        HttpMessageHandler handler,
         LocalAiOptions? options = null)
     {
         options ??= Options();
@@ -354,6 +403,33 @@ public sealed class LocalDecisionEngineTests
     {
         Content = new StringContent(body, Encoding.UTF8, "application/json"),
     };
+
+    /// <summary>A stub that answers the chat and the model-list paths differently.</summary>
+    private sealed class RoutingHandler : HttpMessageHandler
+    {
+        public HttpResponseMessage? ChatResponse { get; init; }
+
+        public HttpResponseMessage? ModelsResponse { get; init; }
+
+        public int ModelsRequests { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var path = request.RequestUri!.AbsolutePath;
+
+            if (path.EndsWith("/models", StringComparison.Ordinal))
+            {
+                ModelsRequests++;
+                return Task.FromResult(ModelsResponse!);
+            }
+
+            return Task.FromResult(ChatResponse!);
+        }
+    }
 
     private sealed class StubHandler : HttpMessageHandler
     {

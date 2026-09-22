@@ -66,3 +66,19 @@ public sealed record LocalChatResponseMessage
     [JsonPropertyName("content")]
     public string? Content { get; init; }
 }
+
+/// <summary>The response of <c>GET /v1/models</c>, read only to improve a "no such model" error.</summary>
+public sealed record LocalModelList
+{
+    /// <summary>One entry per model the endpoint can serve.</summary>
+    [JsonPropertyName("data")]
+    public IReadOnlyList<LocalModelEntry>? Data { get; init; }
+}
+
+/// <summary>One model the endpoint can serve.</summary>
+public sealed record LocalModelEntry
+{
+    /// <summary>The model id, as it must be given to <c>LOCAL_AI_MODEL</c>.</summary>
+    [JsonPropertyName("id")]
+    public string? Id { get; init; }
+}

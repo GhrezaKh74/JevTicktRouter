@@ -248,7 +248,7 @@ public sealed class LocalOpenAiCompatibleDecisionEngine : IDecisionEngine
             404 => $"The local endpoint has no model named '{_options.Model}', or the base URL is wrong. "
                 + $"Tried {_options.BaseUrl}/{CompletionsPath}. The base URL must include the OpenAI "
                 + "compatibility segment, e.g. http://localhost:11434/v1 rather than "
-                + $"http://localhost:11434. Check the model is pulled with: ollama list",
+                + $"http://localhost:11434.{await DescribeAvailableModelsAsync(cancellationToken).ConfigureAwait(false)}",
             >= 500 => "The local endpoint reported an internal error.",
             _ => $"The local endpoint returned an unexpected status ({(int)status}).",
         };
@@ -263,6 +263,40 @@ public sealed class LocalOpenAiCompatibleDecisionEngine : IDecisionEngine
             AiProvider.Local,
             DecisionFailureKind.Provider,
             status);
+    }
+
+    /// <summary>
+    /// Best-effort: asks the endpoint which models it can serve, so a "no such model" error names
+    /// the real options. Purely diagnostic — any failure here is swallowed, because the caller is
+    /// already reporting a different error and this must never replace it.
+    /// </summary>
+    private async Task<string> DescribeAvailableModelsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+
+            var list = await _httpClient
+                .GetFromJsonAsync<LocalModelList>("models", LocalAiJson.Options, timeout.Token)
+                .ConfigureAwait(false);
+
+            var names = list?.Data?
+                .Select(entry => entry.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Take(20)
+                .ToList();
+
+            return names is { Count: > 0 }
+                ? $" Models this endpoint can serve: {string.Join(", ", names)}."
+                : " The endpoint reported no models at all; pull one with: ollama pull <model>";
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException or JsonException or NotSupportedException
+                or OperationCanceledException)
+        {
+            return " Check which models are available with: ollama list";
+        }
     }
 
     private static DecisionEngineException Malformed(string reason, Exception? inner = null) =>

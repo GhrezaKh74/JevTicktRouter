@@ -1,0 +1,47 @@
+# ------------------------------------------------------------------------------------------------
+# Line endings.
+#
+# Without this file, Git for Windows checks everything out as CRLF, which is harmless for C# and
+# TypeScript but fatal for a shell script that runs inside a Linux container: `#!/bin/sh` followed
+# by a carriage return makes the kernel look for an interpreter named "/bin/sh\r", and Docker
+# reports that as "no such file or directory" on a file that is plainly there.
+#
+# So: normalise text in the repository, and pin LF on everything that a Linux image executes or
+# reads, whatever the host developer's platform.
+# ------------------------------------------------------------------------------------------------
+
+# Let Git decide what is text, and store it with LF.
+* text=auto
+
+# --- Must be LF: these run inside containers -----------------------------------------------------
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+.dockerignore   text eol=lf
+*.py            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+.env.example    text eol=lf
+
+# --- Windows-native tooling expects CRLF ---------------------------------------------------------
+*.ps1           text eol=crlf
+*.cmd           text eol=crlf
+*.bat           text eol=crlf
+*.sln           text eol=crlf
+
+# --- Binary: never touch, never diff as text -----------------------------------------------------
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.woff          binary
+*.woff2         binary
+*.pt            binary
+*.safetensors   binary
+*.gguf          binary
+*.onnx          binary
+
+# --- Generated: collapse in diffs and reviews ----------------------------------------------------
+package-lock.json   linguist-generated=true -diff

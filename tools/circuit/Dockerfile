@@ -76,7 +76,12 @@ COPY fetch_weights.py entrypoint.sh /opt/circuit/
 
 # A named volume mounted at /weights inherits this ownership when Docker first creates it, so the
 # non-root user can write the download without a chown at startup.
-RUN useradd --create-home --uid 10001 circuit \
+# The CR strip is not paranoia: a Windows checkout without .gitattributes turns entrypoint.sh into
+# CRLF, and `#!/bin/sh\r` makes the kernel look for an interpreter named "/bin/sh\r" -- which Docker
+# reports, confusingly, as "no such file or directory" on a file that is plainly there. Fixing it
+# here means the image builds from any checkout, however the host mangled the line endings.
+RUN sed -i 's/\r$//' /opt/circuit/entrypoint.sh \
+    && useradd --create-home --uid 10001 circuit \
     && mkdir -p /weights \
     && chown -R circuit:circuit /weights /opt/circuit \
     && chmod +x /opt/circuit/entrypoint.sh
